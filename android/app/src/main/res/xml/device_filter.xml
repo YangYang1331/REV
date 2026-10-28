@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- USB 串口桥接芯片过滤表：OTG 插入 ELM327 时用于权限弹窗 / 识别。
+     覆盖 CH340 / CP210x / PL2303 / FTDI 常见 VID:PID；
+     CDC-ACM 类设备由 usb_serial 库按设备类匹配，此处不强制列死 VID。 -->
+<resources>
+    <usb-device vendor-id="6790" product-id="29987" /><!-- CH340  0x1A86:0x7523 -->
+    <usb-device vendor-id="6790" product-id="21795" /><!-- CH341  0x1A86:0x5523 -->
+    <usb-device vendor-id="6790" product-id="21778" /><!-- CH341A 0x1A86:0x5512 -->
+
+    <usb-device vendor-id="4292" product-id="60000" /><!-- CP210x 0x10C4:0xEA60 -->
+    <usb-device vendor-id="4292" product-id="60017" /><!-- CP210x 0x10C4:0xEA71 -->
+
+    <usb-device vendor-id="1659" product-id="8963" /><!-- PL2303 0x067B:0x2303 -->
+
+    <usb-device vendor-id="1027" product-id="24577" /><!-- FTDI FT232 0x0403:0x6001 -->
+    <usb-device vendor-id="1027" product-id="24592" /><!-- FTDI FT2232 0x0403:0x6010 -->
+    <usb-device vendor-id="1027" product-id="24597" /><!-- FTDI FT230X 0x0403:0x6015 -->
+</resources>

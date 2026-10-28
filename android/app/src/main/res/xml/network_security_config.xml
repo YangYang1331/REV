@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置（v2.14.0）。
+  默认全局禁止明文 HTTP（cleartext），仅对本地 OBD 网段放行，方便连车载 WiFi ELM327。
+  云端上报已切到 HTTPS（https://mayangyang.eu.cc），不再需要全局 cleartext。
+  注意：networkSecurityConfig 不支持 CIDR，这里显式放行 OBD WiFi 常见网关 IP；
+  用户在设置里填的自建本地 http 服务器也需落到这些网段才能直连。
+-->
+<network-security-config>
+    <!-- 默认：全部禁止明文 -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- 本地 OBD 网段豁免：仅放行明文，仅限这些已知车载 WiFi ELM327 网关。
+         （Flutter dart:io 的 raw socket OBD 串口本就不受 NSC 限制，这里主要兜住
+          极少数走 http:// 的本地调试服务器。） -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.0.10</domain>
+        <domain includeSubdomains="false">192.168.0.123</domain>
+        <domain includeSubdomains="false">192.168.4.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

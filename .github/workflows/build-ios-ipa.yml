@@ -1,0 +1,53 @@
+name: REV iOS IPA (macOS 云构建)
+
+# 用法：把本工程推到 GitHub 仓库后，Actions 会自动在 macOS 云跑器上构建 IPA。
+# 也可在仓库 Actions 页手动点 "Run workflow" 触发。
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 用最新 stable Flutter（REV 的 flutter_soloud 5.x 需要 Dart >=3.11）
+      - name: 安装 Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: 查看 Flutter/Dart 版本
+        run: flutter --version
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 清理旧产物
+        run: flutter clean
+
+      - name: 构建未签名 IPA
+        run: flutter build ipa --release --no-codesign
+        env:
+          http_proxy: ''
+          https_proxy: ''
+          HTTP_PROXY: ''
+          HTTPS_PROXY: ''
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: REV-ios-ipa
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+
+      - name: 上传 .app 包（备用，供自签工具直接用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: REV-app-bundle
+          path: build/ios/archive/Runner.xcarchive/Products/Applications/
+          if-no-files-found: ignore

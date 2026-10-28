@@ -1,0 +1,120 @@
+name: obd_dashboard
+description: REV — 车机 OBD 实时仪表盘（十套皮肤 · 账号体系 · 车队看板 · 马力曲线/电池健康/故障码/圈速/多页面/前台保活）
+publish_to: "none"
+version: 2.14.0+40
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 蓝牙
+  flutter_blue_plus: ^1.32.0
+
+  # USB 有线串口 OBD（OTG 转接头连 ELM327：CH340/CP210x/PL230x/FTDI/CDC）
+  usb_serial: ^0.5.2
+
+  # 状态管理
+  flutter_riverpod: ^2.5.1
+
+  # 本地存储
+  shared_preferences: ^2.2.3
+
+  # 权限 / 常亮
+  permission_handler: ^11.3.0
+  wakelock_plus: ^1.2.8
+
+  # GPS 定位（车队看板轨迹 + GPS 快乐表速度源）
+  geolocator: ^13.0.1
+
+  # 加速度计（纵向 G 值 / 加减速状态）
+  sensors_plus: ^6.1.0
+
+  # 应用内更新下载 / 安装
+  path_provider: ^2.1.4
+  open_filex: ^4.5.0
+
+  # 音效反馈（连接成功 / 告警）
+  audioplayers: ^6.1.0
+
+  # 实时合成引擎声浪（SoLoud C++/miniaudio FFI；minSdk21，含 armv7）
+  flutter_soloud: ^5.2.1
+
+  # 可编辑拖拽磁贴看板
+  reorderable_grid_view: ^2.2.8
+
+dev_dependencies:
+  flutter_lints: ^3.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: DSEG7
+      fonts:
+        - asset: assets/fonts/DSEG7Classic-Bold.ttf
+          weight: 700
+    - family: Orbitron
+      fonts:
+        - asset: assets/fonts/Orbitron.ttf
+
+  assets:
+    - assets/images/
+    - assets/fonts/DSEG-LICENSE.txt
+    - assets/audio/
+    - assets/audio/packs/manifest.json
+    # 引擎采样包：Flutter 目录资产不递归，需逐包逐档显式列出（hi 手机包 / lo 车机包）。
+    - assets/audio/packs/mazda6_na/hi/
+    - assets/audio/packs/mazda6_na/lo/
+    - assets/audio/packs/hellcat_supercharged/hi/
+    - assets/audio/packs/hellcat_supercharged/lo/
+    - assets/audio/packs/ls_v8/hi/
+    - assets/audio/packs/ls_v8/lo/
+    - assets/audio/packs/lambo_v10/hi/
+    - assets/audio/packs/lambo_v10/lo/
+    - assets/audio/packs/v12/hi/
+    - assets/audio/packs/v12/lo/
+    - assets/audio/packs/bmw_s58/hi/
+    - assets/audio/packs/bmw_s58/lo/
+    - assets/audio/packs/ea888_20t/hi/
+    - assets/audio/packs/ea888_20t/lo/
+    - assets/audio/packs/porsche_gt3/hi/
+    - assets/audio/packs/porsche_gt3/lo/
+    - assets/audio/packs/porsche_turbo/hi/
+    - assets/audio/packs/porsche_turbo/lo/
+    - assets/audio/packs/audi_r8/hi/
+    - assets/audio/packs/audi_r8/lo/
+    - assets/audio/packs/nissan_gtr/hi/
+    - assets/audio/packs/nissan_gtr/lo/
+    - assets/audio/packs/toyota_supra/hi/
+    - assets/audio/packs/toyota_supra/lo/
+    - assets/audio/packs/mazda_rotary/hi/
+    - assets/audio/packs/mazda_rotary/lo/
+    - assets/audio/packs/honda_typer/hi/
+    - assets/audio/packs/honda_typer/lo/
+    - assets/audio/packs/mustang_gt/hi/
+    - assets/audio/packs/mustang_gt/lo/
+    - assets/audio/packs/corvette_c8/hi/
+    - assets/audio/packs/corvette_c8/lo/
+    - assets/audio/packs/dodge_viper/hi/
+    - assets/audio/packs/dodge_viper/lo/
+    - assets/audio/packs/amg_c63/hi/
+    - assets/audio/packs/amg_c63/lo/
+    - assets/audio/packs/subaru_sti/hi/
+    - assets/audio/packs/subaru_sti/lo/
+    - assets/audio/packs/mitsubishi_evo/hi/
+    - assets/audio/packs/mitsubishi_evo/lo/
+    - assets/audio/packs/lexus_lfa/hi/
+    - assets/audio/packs/lexus_lfa/lo/
+
+# 顶层 hooks（必须放在 flutter: 段之外；若嵌进 flutter 段会吞掉下面的 fonts/assets）
+# flutter_soloud 构建钩子：只合成/放 wav，不需要 ogg/vorbis/opus/flac，
+# 关掉 Xiph 解码给 APK 减肥（不影响默认 WAV 播放与各 ABI 构建）。
+hooks:
+  user_defines:
+    flutter_soloud:
+      no_xiph_libs: true

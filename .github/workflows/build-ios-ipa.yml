@@ -35,11 +35,6 @@ jobs:
 
       - name: 构建未签名 IPA
         run: flutter build ipa --release --no-codesign
-        env:
-          http_proxy: ''
-          https_proxy: ''
-          HTTP_PROXY: ''
-          HTTPS_PROXY: ''
 
       - name: 上传 IPA 产物
         uses: actions/upload-artifact@v4

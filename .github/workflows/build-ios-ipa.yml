@@ -9,8 +9,11 @@ on:
 
 jobs:
   build-ipa:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: 检出代码
         uses: actions/checkout@v4

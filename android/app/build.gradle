@@ -1,0 +1,78 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+// ── Release 签名（v2.14.0）──
+// 标准 Flutter 做法：密钥不进仓库，放在 android/key.properties（已 gitignore）。
+// 存在则用正式 release 签名（启用 v3/v4）；不存在则回退 debug 签名，
+// 便于 `flutter run --release` 在没有密钥的机器上跑开发包。
+// 发布机（build_release.sh）必须有 key.properties，否则脚本会提前报错退出。
+def keyPropsFile = rootProject.file("key.properties")
+def keyProps = new Properties()
+if (keyPropsFile.exists()) {
+    keyProps.load(new FileInputStream(keyPropsFile))
+}
+
+android {
+    namespace = "com.rev.cluster"
+    compileSdk = 36
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId = "com.rev.cluster"
+        // 马6车机 Android 7.1(API25) 起步；usb_serial 兼容 minSdk16，这里统一卡 24。
+        minSdkVersion = 24
+        targetSdk = 36
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        release {
+            if (keyPropsFile.exists()) {
+                keyAlias = keyProps['keyAlias']
+                keyPassword = keyProps['keyPassword']
+                storeFile = keyProps['storeFile'] ? file(keyProps['storeFile']) : null
+                storePassword = keyProps['storePassword']
+                // 启用 APK Signature Scheme v3（支持密钥轮换）+ v4（增量安装侧车）。
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // 有正式密钥走 release 签名；否则回退 debug（仅开发/本机调试，不发布）。
+            signingConfig = keyPropsFile.exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    // ── 统一 extractNativeLibs=false：.so 以 STORED 不压缩 + 4K 页对齐。
+    // useLegacyPackaging=false 即等价于 android:extractNativeLibs="false"，
+    // 由 AGP 在打包时对 lib/<abi>/*.so 做 STORED + page-align（zipalign -p 4）。
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

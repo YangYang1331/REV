@@ -1,0 +1,242 @@
+[
+  {
+    "engine": "mazda_rotary",
+    "band": "loop_idle",
+    "src": "rotary_engine_383940_1126957.wav",
+    "start": 3.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "mazda_rotary",
+    "band": "loop_low",
+    "src": "rotary_engine_383940_1126957.wav",
+    "start": 10.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "mazda_rotary",
+    "band": "loop_mid",
+    "src": "rotary_engine_383940_1126957.wav",
+    "start": 16.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "mazda_rotary",
+    "band": "loop_high",
+    "src": "rotary_engine_383940_1126957.wav",
+    "start": 22.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "mazda_rotary",
+    "band": "loop_bounce",
+    "src": "rotary_engine_383940_1126957.wav",
+    "start": 27.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "nissan_gtr",
+    "band": "loop_idle",
+    "src": "vr38_845696_18472867.wav",
+    "start": 3.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "nissan_gtr",
+    "band": "loop_low",
+    "src": "vr38_845696_18472867.wav",
+    "start": 12.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "nissan_gtr",
+    "band": "loop_mid",
+    "src": "vr38_845696_18472867.wav",
+    "start": 20.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "nissan_gtr",
+    "band": "loop_high",
+    "src": "vr38_845696_18472867.wav",
+    "start": 28.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "nissan_gtr",
+    "band": "loop_bounce",
+    "src": "vr38_845696_18472867.wav",
+    "start": 35.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "porsche_gt3",
+    "band": "loop_idle",
+    "src": "flat6_772802_6753194.wav",
+    "start": 2.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "porsche_gt3",
+    "band": "loop_low",
+    "src": "flat6_772802_6753194.wav",
+    "start": 8.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "porsche_gt3",
+    "band": "loop_mid",
+    "src": "flat6_772802_6753194.wav",
+    "start": 14.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "porsche_gt3",
+    "band": "loop_high",
+    "src": "flat6_772802_6753194.wav",
+    "start": 19.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "porsche_gt3",
+    "band": "loop_bounce",
+    "src": "flat6_772802_6753194.wav",
+    "start": 23.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "subaru_sti",
+    "band": "loop_idle",
+    "src": "flat4_273334_4168822.wav",
+    "start": 2.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "subaru_sti",
+    "band": "loop_low",
+    "src": "flat4_273334_4168822.wav",
+    "start": 8.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "subaru_sti",
+    "band": "loop_mid",
+    "src": "flat4_273334_4168822.wav",
+    "start": 14.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "subaru_sti",
+    "band": "loop_high",
+    "src": "flat4_273334_4168822.wav",
+    "start": 18.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "subaru_sti",
+    "band": "loop_bounce",
+    "src": "flat4_273334_4168822.wav",
+    "start": 20.041066,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "corvette_c8",
+    "band": "loop_idle",
+    "src": "v8_corvette_427219_1024769.wav",
+    "start": 3.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "corvette_c8",
+    "band": "loop_low",
+    "src": "v8_corvette_427219_1024769.wav",
+    "start": 10.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "corvette_c8",
+    "band": "loop_mid",
+    "src": "v8_corvette_427219_1024769.wav",
+    "start": 17.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "corvette_c8",
+    "band": "loop_high",
+    "src": "v8_corvette_427219_1024769.wav",
+    "start": 23.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "corvette_c8",
+    "band": "loop_bounce",
+    "src": "v8_corvette_427219_1024769.wav",
+    "start": 27.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "toyota_supra",
+    "band": "loop_idle",
+    "src": "inline6_turbo_405284_7891112.wav",
+    "start": 3.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "toyota_supra",
+    "band": "loop_low",
+    "src": "inline6_turbo_405284_7891112.wav",
+    "start": 9.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "toyota_supra",
+    "band": "loop_mid",
+    "src": "inline6_turbo_405284_7891112.wav",
+    "start": 15.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "toyota_supra",
+    "band": "loop_high",
+    "src": "inline6_turbo_405284_7891112.wav",
+    "start": 21.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "toyota_supra",
+    "band": "loop_bounce",
+    "src": "inline6_turbo_405284_7891112.wav",
+    "start": 24.312993,
+    "dur": 2.5,
+    "out": 2.5
+  }
+]

@@ -1,0 +1,382 @@
+[
+  {
+    "engine": "ls_v8",
+    "band": "loop_idle",
+    "src_fsid": "486338_536260",
+    "keyword": "muscle car idle",
+    "src_dur": 28.0,
+    "cut": "3.0-12.0s",
+    "out_dur": 9.0,
+    "spectrum": "clear V8 bottom harmonics + firing pulses"
+  },
+  {
+    "engine": "ls_v8",
+    "band": "loop_low",
+    "src_fsid": "486338_536260",
+    "keyword": "muscle car idle",
+    "src_dur": 28.0,
+    "cut": "13.0-17.0s",
+    "out_dur": 4.0,
+    "spectrum": "steady low-RPM"
+  },
+  {
+    "engine": "ls_v8",
+    "band": "loop_mid",
+    "src_fsid": "486338_536260",
+    "keyword": "muscle car idle",
+    "src_dur": 28.0,
+    "cut": "18.0-22.0s",
+    "out_dur": 4.0,
+    "spectrum": "mid-RPM"
+  },
+  {
+    "engine": "ls_v8",
+    "band": "loop_high",
+    "src_fsid": "486338_536260",
+    "keyword": "muscle car idle",
+    "src_dur": 28.0,
+    "cut": "23.0-26.5s",
+    "out_dur": 3.5,
+    "spectrum": "high-RPM"
+  },
+  {
+    "engine": "ls_v8",
+    "band": "loop_bounce",
+    "src_fsid": "486338_536260",
+    "keyword": "muscle car idle",
+    "src_dur": 28.0,
+    "cut": "25.5-28.0s",
+    "out_dur": 2.5,
+    "spectrum": "deceleration"
+  },
+  {
+    "engine": "ls_v8",
+    "band": "one_pop",
+    "src_fsid": "797835_15956618",
+    "keyword": "exhaust pop",
+    "src_dur": 11.3,
+    "cut": "2.0s",
+    "out_dur": 0.6,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "loop_idle",
+    "src_fsid": "650639_4835746",
+    "keyword": "hemi engine",
+    "src_dur": 42.3,
+    "cut": "2.0-11.0s",
+    "out_dur": 9.0,
+    "spectrum": "clear bottom harmonics, supercharged whine"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "loop_low",
+    "src_fsid": "650639_4835746",
+    "keyword": "hemi engine",
+    "src_dur": 42.3,
+    "cut": "12.0-16.0s",
+    "out_dur": 4.0,
+    "spectrum": "low-RPM"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "loop_mid",
+    "src_fsid": "650639_4835746",
+    "keyword": "hemi engine",
+    "src_dur": 42.3,
+    "cut": "20.0-23.5s",
+    "out_dur": 3.5,
+    "spectrum": "mid-RPM"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "loop_high",
+    "src_fsid": "650639_4835746",
+    "keyword": "hemi engine",
+    "src_dur": 42.3,
+    "cut": "30.0-33.0s",
+    "out_dur": 3.0,
+    "spectrum": "high-RPM"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "loop_bounce",
+    "src_fsid": "650639_4835746",
+    "keyword": "hemi engine",
+    "src_dur": 42.3,
+    "cut": "37.0-39.5s",
+    "out_dur": 2.5,
+    "spectrum": "deceleration"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "one_pop",
+    "src_fsid": "797835_15956618",
+    "keyword": "exhaust pop",
+    "src_dur": 11.3,
+    "cut": "4.0s",
+    "out_dur": 0.6,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "one_whine",
+    "src_fsid": "110736_1942689",
+    "keyword": "supercharger whine",
+    "src_dur": 9.5,
+    "cut": "1.0s",
+    "out_dur": 0.8,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "v12",
+    "band": "loop_idle",
+    "src_fsid": "754779_6823432",
+    "keyword": "v12 engine idle",
+    "src_dur": 36.0,
+    "cut": "3.0-12.0s",
+    "out_dur": 9.0,
+    "spectrum": "clear dense V12 harmonic bands"
+  },
+  {
+    "engine": "v12",
+    "band": "loop_low",
+    "src_fsid": "754779_6823432",
+    "keyword": "v12 engine idle",
+    "src_dur": 36.0,
+    "cut": "13.0-17.0s",
+    "out_dur": 4.0,
+    "spectrum": "low-RPM"
+  },
+  {
+    "engine": "v12",
+    "band": "loop_mid",
+    "src_fsid": "754779_6823432",
+    "keyword": "v12 engine idle",
+    "src_dur": 36.0,
+    "cut": "18.0-22.0s",
+    "out_dur": 4.0,
+    "spectrum": "mid-RPM"
+  },
+  {
+    "engine": "v12",
+    "band": "loop_high",
+    "src_fsid": "754779_6823432",
+    "keyword": "v12 engine idle",
+    "src_dur": 36.0,
+    "cut": "25.0-28.5s",
+    "out_dur": 3.5,
+    "spectrum": "high-RPM"
+  },
+  {
+    "engine": "v12",
+    "band": "loop_bounce",
+    "src_fsid": "754779_6823432",
+    "keyword": "v12 engine idle",
+    "src_dur": 36.0,
+    "cut": "31.0-33.5s",
+    "out_dur": 2.5,
+    "spectrum": "deceleration"
+  },
+  {
+    "engine": "v12",
+    "band": "one_pop",
+    "src_fsid": "797835_15956618",
+    "keyword": "exhaust pop",
+    "src_dur": 11.3,
+    "cut": "6.0s",
+    "out_dur": 0.6,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "loop_idle",
+    "src_fsid": "222607_3600926",
+    "keyword": "lamborghini gallardo",
+    "src_dur": 29.5,
+    "cut": "2.0-11.0s",
+    "out_dur": 9.0,
+    "spectrum": "dense bright V10 harmonics"
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "loop_low",
+    "src_fsid": "222607_3600926",
+    "keyword": "lamborghini gallardo",
+    "src_dur": 29.5,
+    "cut": "8.0-12.0s",
+    "out_dur": 4.0,
+    "spectrum": "low-RPM"
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "loop_mid",
+    "src_fsid": "222607_3600926",
+    "keyword": "lamborghini gallardo",
+    "src_dur": 29.5,
+    "cut": "15.0-19.0s",
+    "out_dur": 4.0,
+    "spectrum": "mid-RPM"
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "loop_high",
+    "src_fsid": "222607_3600926",
+    "keyword": "lamborghini gallardo",
+    "src_dur": 29.5,
+    "cut": "22.0-25.5s",
+    "out_dur": 3.5,
+    "spectrum": "high-RPM"
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "loop_bounce",
+    "src_fsid": "222607_3600926",
+    "keyword": "lamborghini gallardo",
+    "src_dur": 29.5,
+    "cut": "26.0-28.5s",
+    "out_dur": 2.5,
+    "spectrum": "deceleration"
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "one_pop",
+    "src_fsid": "797835_15956618",
+    "keyword": "exhaust pop",
+    "src_dur": 11.3,
+    "cut": "8.0s",
+    "out_dur": 0.6,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "loop_idle",
+    "src_fsid": "95838_1059930",
+    "keyword": "4 cylinder engine",
+    "src_dur": 31.9,
+    "cut": "2.0-11.0s",
+    "out_dur": 9.0,
+    "spectrum": "inline-4 harmonic structure"
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "loop_low",
+    "src_fsid": "95838_1059930",
+    "keyword": "4 cylinder engine",
+    "src_dur": 31.9,
+    "cut": "10.0-14.0s",
+    "out_dur": 4.0,
+    "spectrum": "low-RPM"
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "loop_mid",
+    "src_fsid": "95838_1059930",
+    "keyword": "4 cylinder engine",
+    "src_dur": 31.9,
+    "cut": "18.0-22.0s",
+    "out_dur": 4.0,
+    "spectrum": "mid-RPM"
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "loop_high",
+    "src_fsid": "95838_1059930",
+    "keyword": "4 cylinder engine",
+    "src_dur": 31.9,
+    "cut": "25.0-28.5s",
+    "out_dur": 3.5,
+    "spectrum": "high-RPM"
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "loop_bounce",
+    "src_fsid": "95838_1059930",
+    "keyword": "4 cylinder engine",
+    "src_dur": 31.9,
+    "cut": "29.0-31.5s",
+    "out_dur": 2.5,
+    "spectrum": "deceleration"
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "one_pop",
+    "src_fsid": "797835_15956618",
+    "keyword": "exhaust pop",
+    "src_dur": 11.3,
+    "cut": "1.0s",
+    "out_dur": 0.6,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "loop_idle",
+    "src_fsid": "659953_13767047",
+    "keyword": "2.0 turbo engine",
+    "src_dur": 42.1,
+    "cut": "3.0-12.0s",
+    "out_dur": 9.0,
+    "spectrum": "EXCELLENT clear harmonic bands at multiple freqs"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "loop_low",
+    "src_fsid": "659953_13767047",
+    "keyword": "2.0 turbo engine",
+    "src_dur": 42.1,
+    "cut": "12.0-16.0s",
+    "out_dur": 4.0,
+    "spectrum": "low-RPM"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "loop_mid",
+    "src_fsid": "659953_13767047",
+    "keyword": "2.0 turbo engine",
+    "src_dur": 42.1,
+    "cut": "22.0-26.0s",
+    "out_dur": 4.0,
+    "spectrum": "mid-RPM"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "loop_high",
+    "src_fsid": "659953_13767047",
+    "keyword": "2.0 turbo engine",
+    "src_dur": 42.1,
+    "cut": "32.0-35.5s",
+    "out_dur": 3.5,
+    "spectrum": "high-RPM"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "loop_bounce",
+    "src_fsid": "659953_13767047",
+    "keyword": "2.0 turbo engine",
+    "src_dur": 42.1,
+    "cut": "38.0-40.5s",
+    "out_dur": 2.5,
+    "spectrum": "deceleration"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "one_pop",
+    "src_fsid": "797835_15956618",
+    "keyword": "exhaust pop",
+    "src_dur": 11.3,
+    "cut": "5.0s",
+    "out_dur": 0.6,
+    "spectrum": "n/a"
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "one_blowoff",
+    "src_fsid": "348051_1648170",
+    "keyword": "dump valve",
+    "src_dur": 67.9,
+    "cut": "10.0s",
+    "out_dur": 0.5,
+    "spectrum": "n/a"
+  }
+]

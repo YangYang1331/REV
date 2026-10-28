@@ -1,0 +1,61 @@
+name: REV iOS IPA (macOS 云构建)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: 查看 Flutter/Dart 版本
+        run: flutter --version
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 清理旧产物
+        run: flutter clean
+
+      - name: 构建（未签名 archive）
+        run: flutter build ipa --release --no-codesign
+
+      - name: 把 .app 打包成标准未签名 IPA
+        run: |
+          set -euo pipefail
+          APP="build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app"
+          ls -la "$APP"
+          mkdir -p build/ios/ipa
+          rm -rf build/ios/ipa/Payload build/ios/ipa/REV.ipa
+          mkdir -p build/ios/ipa/Payload
+          cp -R "$APP" build/ios/ipa/Payload/
+          ( cd build/ios/ipa && zip -r -q REV.ipa Payload )
+          rm -rf build/ios/ipa/Payload
+          ls -la build/ios/ipa/REV.ipa
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: REV-ios-ipa
+          path: build/ios/ipa/REV.ipa
+          if-no-files-found: error
+
+      - name: 上传 .xcarchive（备用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: REV-xcarchive
+          path: build/ios/archive/Runner.xcarchive
+          if-no-files-found: ignore

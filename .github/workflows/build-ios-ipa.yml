@@ -1,7 +1,5 @@
 name: REV iOS IPA (macOS 云构建)
 
-# 用法：把本工程推到 GitHub 仓库后，Actions 会自动在 macOS 云跑器上构建 IPA。
-# 也可在仓库 Actions 页手动点 "Run workflow" 触发。
 on:
   push:
     branches: [main, master]
@@ -18,7 +16,6 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 用最新 stable Flutter（REV 的 flutter_soloud 5.x 需要 Dart >=3.11）
       - name: 安装 Flutter stable
         uses: subosito/flutter-action@v2
         with:
@@ -33,19 +30,32 @@ jobs:
       - name: 清理旧产物
         run: flutter clean
 
-      - name: 构建未签名 IPA
+      - name: 构建（未签名 archive）
         run: flutter build ipa --release --no-codesign
+
+      - name: 把 .app 打包成标准未签名 IPA
+        run: |
+          set -euo pipefail
+          APP="build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app"
+          ls -la "$APP"
+          mkdir -p build/ios/ipa
+          rm -rf build/ios/ipa/Payload build/ios/ipa/REV.ipa
+          mkdir -p build/ios/ipa/Payload
+          cp -R "$APP" build/ios/ipa/Payload/
+          ( cd build/ios/ipa && zip -r -q REV.ipa Payload )
+          rm -rf build/ios/ipa/Payload
+          ls -la build/ios/ipa/REV.ipa
 
       - name: 上传 IPA 产物
         uses: actions/upload-artifact@v4
         with:
           name: REV-ios-ipa
-          path: build/ios/ipa/*.ipa
+          path: build/ios/ipa/REV.ipa
           if-no-files-found: error
 
-      - name: 上传 .app 包（备用，供自签工具直接用）
+      - name: 上传 .xcarchive（备用）
         uses: actions/upload-artifact@v4
         with:
-          name: REV-app-bundle
-          path: build/ios/archive/Runner.xcarchive/Products/Applications/
+          name: REV-xcarchive
+          path: build/ios/archive/Runner.xcarchive
           if-no-files-found: ignore

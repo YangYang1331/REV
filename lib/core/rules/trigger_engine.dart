@@ -21,7 +21,7 @@ class TriggerAction {
   final bool redScreen;
   final bool shiftLamp;
 
-  /// 需要 TTS 播报（实际语音需 flutter_tts 插件，当前仅产出事件，见交付说明）。
+  /// 需要 TTS 播报（由 TtsService 在规则触发边沿朗读，见 lab_screen）。
   final bool announce;
 
   TriggerAction merge(TriggerAction o) => TriggerAction(

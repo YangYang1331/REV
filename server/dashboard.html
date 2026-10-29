@@ -2,352 +2,372 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>REV · 车队看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0a0b0d; --bg2:#101216; --line:#1f232a; --line-soft:#161920;
-    --ink:#e9ebf0; --dim:#8b929e; --faint:#5c6370;
-    --accent:#ff4a1c; --ok:#2ee68a; --warn:#ffb020; --bad:#ff3b5c; --teal:#3ddad7;
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  html{color-scheme:dark}
-  body{background:radial-gradient(120% 90% at 50% 0%,#0e1116 0%,#0a0b0d 60%);
-    color:var(--ink);font-family:'Inter',system-ui,-apple-system,sans-serif;padding:28px;min-height:100vh}
-  .num{font-family:'Rajdhani','Arial Narrow',sans-serif;font-variant-numeric:tabular-nums}
+:root{
+  --bg:#07080B; --panel:rgba(18,22,30,.62); --panel2:rgba(24,29,39,.85);
+  --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+  --txt:#E8ECF2; --dim:#8A93A3; --faint:#5A6474;
+  --cyan:#19E3FF; --orange:#FF4D1C; --red:#FF2D55; --green:#22E08A; --amber:#FFB020;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--bg);color:var(--txt);font-family:"Rajdhani","PingFang SC","Microsoft YaHei",system-ui,sans-serif;overflow-x:hidden}
+body{min-height:100vh;position:relative}
+a{color:inherit;text-decoration:none}
+.num{font-family:"Orbitron",monospace;font-variant-numeric:tabular-nums}
 
-  header{display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px;margin-bottom:22px;
-    border-bottom:1px solid var(--line-soft);padding-bottom:16px}
-  h1{font-size:22px;letter-spacing:.42em;font-weight:700;text-transform:uppercase;margin:0}
-  h1 b{color:var(--accent)}
-  .live{font-size:11px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;
-    display:flex;align-items:center;gap:8px}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
-  .dot.online{background:var(--ok);animation:pulse 1.6s infinite}
-  .dot.stale{background:var(--warn)}
-  @keyframes pulse{50%{opacity:.3}}
-  .userbox{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-    font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
-  .who b{color:var(--ink);font-weight:700}
-  .role{font-size:10px;padding:2px 7px;border:1px solid var(--line);letter-spacing:.16em}
-  .role.admin{color:var(--accent);border-color:rgba(255,74,28,.5)}
-  .ghost{background:transparent;color:var(--dim);border:1px solid var(--line);padding:7px 14px;
-    font-size:11px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-weight:700}
+/* ===== 背景：速度线 canvas + 网格 + 光晕 ===== */
+#bgfx{position:fixed;inset:0;z-index:0;pointer-events:none}
+.gridtex{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(25,227,255,.045) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(25,227,255,.045) 1px,transparent 1px);
+  background-size:46px 46px;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 100%)}
+.glow{position:fixed;border-radius:50%;filter:blur(110px);z-index:0;pointer-events:none;opacity:.5}
+.glow.a{width:520px;height:520px;background:rgba(25,227,255,.16);top:-180px;left:-120px}
+.glow.b{width:560px;height:560px;background:rgba(255,77,28,.13);top:-160px;right:-160px}
 
-  /* 下载区：v2.10 风格，四个条目纵向紧凑 */
-  .dlwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:22px}
-  .dl{display:flex;align-items:center;gap:12px;background:var(--bg2);
-    border:1px solid var(--line-soft);padding:12px 14px;text-decoration:none;color:var(--ink);
-    position:relative;transition:border-color .12s}
-  .dl::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
-  .dl.c2::before{background:var(--teal)} .dl.c3::before{background:var(--dim)} .dl.c4::before{background:var(--warn)}
-  .dl.c5::before{background:#6fa8ff}
-  .dl:hover{border-color:var(--line)}
-  .dl .ic{width:32px;height:32px;background:var(--line-soft);display:flex;align-items:center;
-    justify-content:center;color:var(--dim);flex:none}
-  .dl .ic svg{width:18px;height:18px}
-  .dl .meta{flex:1;min-width:0}
-  .dl .name{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
-  .dl .desc{font-size:11px;color:var(--dim);margin-top:2px;letter-spacing:.04em}
-  .dl .go{font-size:11px;color:var(--accent);font-weight:700;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+/* ===== 顶栏 ===== */
+.top{position:relative;z-index:5;padding:20px clamp(16px,4vw,48px) 6px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:12px}
+.logo .mk{font-family:"Orbitron";font-weight:900;font-size:30px;letter-spacing:3px;line-height:1;
+  background:linear-gradient(180deg,#fff 20%,#9feeff 70%,#19E3FF);-webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:0 0 26px rgba(25,227,255,.35)}
+.logo .tag{font-size:12px;letter-spacing:2px;color:var(--cyan);border:1px solid rgba(25,227,255,.35);padding:3px 9px;border-radius:4px;
+  text-transform:uppercase;background:rgba(25,227,255,.07)}
+.spacer{flex:1}
+.live{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--dim);letter-spacing:1px;
+  background:var(--panel);border:1px solid var(--line);padding:8px 14px;border-radius:999px;backdrop-filter:blur(10px)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--faint);box-shadow:0 0 0 0 rgba(255,255,255,.2)}
+.dot.online{background:var(--green);animation:pulse 1.6s infinite}
+.dot.stale{background:var(--amber)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,224,138,.55)}70%{box-shadow:0 0 0 9px rgba(34,224,138,0)}100%{box-shadow:0 0 0 0 rgba(34,224,138,0)}}
+.live b{color:var(--txt);font-weight:700}
+.userbox{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+  padding:7px 8px 7px 14px;border-radius:999px;backdrop-filter:blur(10px);font-size:14px}
+.userbox .who b{color:var(--cyan)}
+.role{font-size:11px;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.08);color:var(--dim);margin-left:6px}
+.role.admin{background:rgba(255,176,32,.16);color:var(--amber)}
+.ghost{background:transparent;border:1px solid var(--line2);color:var(--dim);padding:5px 12px;border-radius:999px;cursor:pointer;
+  font-family:inherit;font-size:13px;transition:.2s}
+.ghost:hover{color:var(--red);border-color:var(--red)}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
-  .card{background:var(--bg2);border:1px solid var(--line-soft);padding:20px;
-    position:relative;overflow:hidden}
-  .card.offline{opacity:.72}
-  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
-  .card.demo::before{background:var(--warn)} .card.game::before,.card.gps::before{background:var(--teal)}
-  .card .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px}
-  .card .devid{font-size:11px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;font-weight:700}
-  .card .devid .owner{color:var(--faint);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:.04em}
-  .srcgroup{display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
-  .badge{padding:3px 8px;border:1px solid currentColor;font-weight:700;white-space:nowrap}
-  .badge.obd{color:var(--ok)} .badge.demo{color:var(--warn)} .badge.game,.badge.gps{color:var(--teal)}
-  .badge.off{color:var(--faint)}
-  .age{color:var(--faint);font-size:10px;white-space:nowrap;letter-spacing:.1em}
-  .st{display:flex;align-items:center;gap:5px}
+/* ===== 区块标题 ===== */
+.section{position:relative;z-index:4;padding:22px clamp(16px,4vw,48px) 0}
+.stitle{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.stitle .bar{width:5px;height:22px;border-radius:2px;background:linear-gradient(180deg,var(--cyan),#0a7);box-shadow:0 0 14px rgba(25,227,255,.6)}
+.stitle h2{font-family:"Orbitron";font-size:17px;letter-spacing:2px;font-weight:800}
+.stitle .en{font-size:12px;color:var(--faint);letter-spacing:3px;text-transform:uppercase}
+/* 可折叠区块（下载中心默认收起，手机上不占位） */
+.stitle.collapsible{cursor:pointer;user-select:none;margin-bottom:0}
+.stitle .chev{margin-left:auto;transition:transform .3s;color:var(--dim)}
+.stitle.open .chev{transform:rotate(180deg)}
+.collapse-body{max-height:0;overflow:hidden;transition:max-height .4s ease;margin-top:0}
+.stitle.open + .collapse-body{max-height:1400px;margin-top:16px}
 
-  .hero{display:flex;align-items:flex-end;justify-content:space-between}
-  .speed{font-size:66px;font-weight:700;line-height:.86;letter-spacing:-.03em}
-  .speed small{font-size:12px;color:var(--faint);letter-spacing:.3em;margin-left:8px}
-  .gear{font-size:40px;font-weight:700;color:var(--accent);line-height:1;text-align:right}
-  .gear small{display:block;font-size:10px;color:var(--faint);letter-spacing:.28em;margin-bottom:4px}
-  .rows{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;margin-top:14px}
-  .row{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;
-    border-bottom:1px solid var(--line-soft);font-size:13px}
-  .row .k{color:var(--dim);font-size:10px;letter-spacing:.16em;text-transform:uppercase}
-  .row .v{font-size:17px;font-weight:600}
-  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .teal{color:var(--teal)}
-  .map{margin-top:12px;font-size:12px}
-  .map a{color:var(--accent);text-decoration:none;letter-spacing:.05em}
-  .nogps{margin-top:12px;font-size:11px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
-  .empty{color:var(--faint);font-size:13px;letter-spacing:.1em;padding:60px 0;text-align:center;
-    grid-column:1/-1}
-  .emptybar{position:relative;width:220px;height:8px;background:var(--line-soft);
-    margin:0 auto 24px;overflow:hidden}
-  .emptybar::after{content:"";position:absolute;top:0;bottom:0;width:46px;
-    background:linear-gradient(90deg,transparent,var(--accent),transparent);
-    animation:sweep 1.4s linear infinite}
-  @keyframes sweep{from{left:-46px}to{left:220px}}
+/* ===== 下载区 ===== */
+.dlwrap{position:relative;z-index:4;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.dl{position:relative;overflow:hidden;display:flex;align-items:center;gap:14px;padding:16px;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(12px);
+  transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .25s,box-shadow .25s}
+.dl::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.12) 48%,transparent 60%);
+  transform:translateX(-120%);transition:transform .7s}
+.dl:hover{transform:translateY(-4px);border-color:var(--ac,var(--cyan));box-shadow:0 12px 34px -12px var(--ac,var(--cyan))}
+.dl:hover::before{transform:translateX(120%)}
+.dl .ic{width:46px;height:46px;flex:none;display:grid;place-items:center;border-radius:11px;
+  background:color-mix(in srgb,var(--ac,var(--cyan)) 14%,transparent);color:var(--ac,var(--cyan))}
+.dl .ic svg{width:25px;height:25px}
+.dl .meta{flex:1;min-width:0}
+.dl .name{font-weight:700;font-size:16px;letter-spacing:.5px}
+.dl .desc{font-size:12px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl .go{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--ac,var(--cyan));opacity:0;transform:translateX(-6px);transition:.25s}
+.dl:hover .go{opacity:1;transform:translateX(0)}
+.c1{--ac:var(--cyan)} .c2{--ac:var(--orange)} .c3{--ac:var(--amber)} .c4{--ac:var(--green)} .c5{--ac:#7DB2FF}
 
-  /* 登录遮罩（v2.10 风） */
-  #authOverlay{position:fixed;inset:0;background:rgba(6,7,9,.94);
-    display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
-  #authOverlay.hidden{display:none}
-  .authcard{width:340px;max-width:100%;background:var(--bg2);border:1px solid var(--line-soft);
-    border-left:3px solid var(--accent);padding:28px 26px}
-  .authcard h2{font-size:20px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:4px;font-weight:700}
-  .authcard h2 b{color:var(--accent)}
-  .authcard p.sub{font-size:12px;color:var(--dim);margin-bottom:20px;letter-spacing:.06em}
-  .field{margin-bottom:14px}
-  .field label{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-    color:var(--dim);margin-bottom:6px}
-  .field input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);
-    padding:10px 12px;font-size:14px;outline:none}
-  .field input:focus{border-color:var(--accent)}
-  .authbtn{width:100%;margin-top:6px;cursor:pointer;border:none;background:var(--accent);
-    color:#0a0b0d;font-weight:700;padding:11px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;
-    box-shadow:0 0 18px rgba(255,74,28,.45)}
-  .switch{margin-top:14px;text-align:center;font-size:12px;color:var(--dim)}
-  .switch a{color:var(--accent);cursor:pointer;text-decoration:none}
-  .err{color:var(--bad);font-size:12px;min-height:18px;margin-top:10px}
-  @media (max-width:680px){
-    h1{font-size:18px;letter-spacing:.26em;flex-basis:100%}
-    .userbox{margin-left:0}
-  }
+/* ===== 设备卡片网格 ===== */
+.grid{position:relative;z-index:4;display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  backdrop-filter:blur(14px);transition:border-color .25s,box-shadow .25s}
+.card::after{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),transparent 70%)}
+.card.offline{opacity:.62}
+.card.offline::after{background:linear-gradient(90deg,var(--faint),transparent 70%)}
+.card.game::after{background:linear-gradient(90deg,var(--orange),transparent 70%)}
+.card.gps::after{background:linear-gradient(90deg,var(--amber),transparent 70%)}
+.card .head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line)}
+.devid{font-family:"Orbitron";font-size:13px;letter-spacing:1px;color:var(--dim)}
+.owner{font-family:inherit;color:var(--amber);font-size:12px;margin-left:8px}
+.srcgroup{display:flex;align-items:center;gap:8px}
+.badge{font-size:11px;font-weight:700;letter-spacing:1px;padding:3px 9px;border-radius:5px;
+  background:rgba(25,227,255,.14);color:var(--cyan)}
+.badge.game{background:rgba(255,77,28,.15);color:var(--orange)}
+.badge.gps{background:rgba(255,176,32,.15);color:var(--amber)}
+.badge.demo{background:rgba(255,255,255,.08);color:var(--dim)}
+.badge.off{background:rgba(255,255,255,.06);color:var(--faint)}
+.age{font-size:11px;color:var(--faint)}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;padding:18px 16px 14px;
+  background:radial-gradient(120% 140% at 20% 0%,rgba(25,227,255,.08),transparent 60%)}
+.speed{font-size:52px;font-weight:900;line-height:.9;color:#fff;text-shadow:0 0 30px rgba(25,227,255,.4)}
+.speed small{font-size:12px;letter-spacing:2px;color:var(--dim);margin-left:6px;font-weight:600}
+.gear{font-size:34px;font-weight:800;color:var(--orange);text-align:right;line-height:1}
+.gear small{display:block;font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:3px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;padding:4px 16px 14px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.06);font-size:13px}
+.row .k{color:var(--dim)}
+.row .v{font-weight:700;font-size:14px}
+.v.ok{color:var(--green)} .v.warn{color:var(--amber)} .v.bad{color:var(--red)} .v.teal{color:var(--cyan)}
+.map,.nogps{padding:11px 16px;font-size:12px;border-top:1px solid var(--line)}
+.map a{color:var(--cyan)} .nogps{color:var(--faint)}
+
+.empty{grid-column:1/-1;text-align:center;color:var(--faint);padding:60px 20px;font-size:15px;letter-spacing:1px}
+.emptybar{width:180px;height:3px;margin:0 auto 18px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  animation:slide 1.6s infinite}
+@keyframes slide{0%{opacity:.3}50%{opacity:1}100%{opacity:.3}}
+
+/* ===== 登录遮罩 ===== */
+#authOverlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;
+  background:rgba(5,6,9,.72);backdrop-filter:blur(16px)}
+#authOverlay.hidden{display:none}
+.authcard{width:100%;max-width:400px;background:var(--panel2);border:1px solid var(--line2);border-radius:20px;
+  padding:34px 30px;box-shadow:0 30px 80px -30px rgba(0,0,0,.9),0 0 60px -30px rgba(25,227,255,.4);position:relative;overflow:hidden}
+.authcard::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--orange))}
+.authcard .lk{font-family:"Orbitron";font-weight:900;font-size:26px;letter-spacing:4px;text-align:center;
+  background:linear-gradient(180deg,#fff,#19E3FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.authcard .sub{text-align:center;color:var(--dim);font-size:13px;margin:8px 0 24px;letter-spacing:1px}
+.field{margin-bottom:14px}
+.field input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;
+  padding:13px 15px;color:var(--txt);font-family:inherit;font-size:15px;outline:none;transition:.2s}
+.field input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(25,227,255,.12)}
+.authbtn{width:100%;margin-top:6px;padding:14px;border:none;border-radius:11px;cursor:pointer;
+  font-family:"Orbitron";font-weight:800;font-size:15px;letter-spacing:4px;color:#04121a;
+  background:linear-gradient(180deg,#5ff0ff,#19E3FF);box-shadow:0 10px 30px -10px rgba(25,227,255,.6);transition:.2s}
+.authbtn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.authbtn:active{transform:translateY(0)}
+.err{color:var(--red);font-size:13px;margin-top:12px;min-height:16px;text-align:center}
+.switch{text-align:center;margin-top:18px;font-size:13px;color:var(--dim)}
+.switch a{color:var(--cyan);cursor:pointer;font-weight:700}
+footer{position:relative;z-index:4;text-align:center;color:var(--faint);font-size:12px;padding:34px 16px 26px;letter-spacing:1px}
+footer b{color:var(--dim)}
+@media(max-width:560px){.speed{font-size:44px}.logo .mk{font-size:24px}.live{padding:7px 11px}.userbox{padding:6px 7px 6px 11px}}
 </style>
 </head>
 <body>
+<canvas id="bgfx"></canvas>
+<div class="gridtex"></div>
+<div class="glow a"></div><div class="glow b"></div>
 
 <div id="authOverlay">
   <div class="authcard">
-    <h2><b>REV</b> 车队看板</h2>
+    <div class="lk">REV</div>
     <p class="sub" id="authSub">登录后查看你名下的车辆实时数据</p>
-    <div class="field">
-      <label>账号</label>
-      <input id="inUser" autocomplete="username" placeholder="用户名">
-    </div>
-    <div class="field">
-      <label>密码</label>
-      <input id="inPass" type="password" autocomplete="current-password" placeholder="密码">
-    </div>
+    <div class="field"><input id="inUser" autocomplete="username" placeholder="用户名"></div>
+    <div class="field"><input id="inPass" type="password" autocomplete="current-password" placeholder="密码"></div>
     <button class="authbtn" id="authBtn">登 录</button>
     <div class="err" id="authErr"></div>
     <div class="switch" id="authSwitch">还没有账号？<a id="switchLink">注册新账号</a></div>
   </div>
 </div>
 
-<header>
-  <h1><b>REV</b> FLEET</h1>
-  <div class="live"><span class="dot" id="liveDot"></span><span id="liveTxt">连接中…</span> · <span id="count">0</span> 台在线</div>
-  <div class="userbox">
-    <span class="who">用户 <b id="whoName">--</b> <span class="role" id="whoRole">普通用户</span></span>
-    <button class="ghost" id="logoutBtn">退出登录</button>
+<div class="top">
+  <div class="logo">
+    <span class="mk">REV</span>
+    <span class="tag">车队看板</span>
   </div>
-</header>
-
-<!-- 下载区：手机 / 车机 / 源码 / 精简包 -->
-<div class="dlwrap">
-  <a class="dl" href="/download/rev-latest.apk" download>
-    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="10" y1="18" x2="14" y2="18"/></svg></div>
-    <div class="meta">
-      <div class="name">手机包 · 高清声浪</div>
-      <div class="desc">rev-latest.apk — 完整 21 套真实引擎采样</div>
-    </div>
-    <div class="go">下载</div>
-  </a>
-  <a class="dl c2" href="/download/rev-car.apk" download>
-    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M5 21h14M7 17v4M17 17v4"/></svg></div>
-    <div class="meta">
-      <div class="name">车机包 · 轻量</div>
-      <div class="desc">rev-car.apk — 车机大屏，lo 采样，资源占用低</div>
-    </div>
-    <div class="go">下载</div>
-  </a>
-  <a class="dl c4" href="/download/rev-lite.apk" download>
-    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></div>
-    <div class="meta">
-      <div class="name">精简包 · 最小体积</div>
-      <div class="desc">rev-lite.apk — lo 采样 + arm64 单 ABI，省流量</div>
-    </div>
-    <div class="go">下载</div>
-  </a>
-  <a class="dl c5" href="/download/rev-ios.ipa" download>
-    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 12.5c0-2.4 2-3.5 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.6.9-.8 0-1.9-.9-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.7 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.1.8 1.3 0 2.1-1.2 2.9-2.4.9-1.3 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.6-3.8z"/><path d="M14.3 5.6c.7-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.2 1.8-1 2.9 1.1.1 2.2-.5 2.8-1.3z"/></svg></div>
-    <div class="meta">
-      <div class="name">iOS 包 · 未签名</div>
-      <div class="desc">rev-ios.ipa — 需用全能签/Sideloadly 自行重签后安装</div>
-    </div>
-    <div class="go">下载</div>
-  </a>
-  <a class="dl c3" href="/download/REV-Flutter-source.zip" download>
-    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>
-    <div class="meta">
-      <div class="name">源码包</div>
-      <div class="desc">REV-Flutter-source.zip — Flutter 工程源码</div>
-    </div>
-    <div class="go">下载</div>
-  </a>
+  <div class="spacer"></div>
+  <div class="live"><span class="dot" id="liveDot"></span><span id="liveTxt">连接中…</span> · <b id="count">0</b> 台在线</div>
+  <div class="userbox">
+    <span class="who">车手 <b id="whoName">--</b><span class="role" id="whoRole">普通用户</span></span>
+    <button class="ghost" id="logoutBtn">退出</button>
+  </div>
 </div>
 
-<div class="grid" id="grid"><div class="empty"><div class="emptybar"></div>等待车辆数据上报…</div></div>
+<div class="section">
+  <div class="stitle collapsible" id="dlTitle"><span class="bar"></span><h2>下载中心</h2><span class="en">Downloads · 点击展开</span>
+    <svg class="chev" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></div>
+  <div class="collapse-body"><div class="dlwrap">
+    <a class="dl c1" href="/download/rev-latest.apk" download>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="10" y1="18" x2="14" y2="18"/></svg></div>
+      <div class="meta"><div class="name">手机包 · 高清声浪</div><div class="desc">rev-latest.apk · 完整 21 套引擎采样</div></div>
+      <div class="go">下载 →</div>
+    </a>
+    <a class="dl c2" href="/download/rev-car.apk" download>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M5 21h14M7 17v4M17 17v4"/></svg></div>
+      <div class="meta"><div class="name">车机包 · 轻量</div><div class="desc">rev-car.apk · 大屏 lo 采样，占用低</div></div>
+      <div class="go">下载 →</div>
+    </a>
+    <a class="dl c4" href="/download/rev-lite.apk" download>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></div>
+      <div class="meta"><div class="name">精简包 · 省流量</div><div class="desc">rev-lite.apk · lo + arm64，约 19MB</div></div>
+      <div class="go">下载 →</div>
+    </a>
+    <a class="dl c5" href="/download/rev-ios.ipa" download>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 12.5c0-2.4 2-3.5 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.6.9-.8 0-1.9-.9-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.7 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.1.8 1.3 0 2.1-1.2 2.9-2.4.9-1.3 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.6-3.8z"/><path d="M14.3 5.6c.7-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.2 1.8-1 2.9 1.1.1 2.2-.5 2.8-1.3z"/></svg></div>
+      <div class="meta"><div class="name">iOS 包 · 未签名</div><div class="desc">rev-ios.ipa · 全能签/Sideloadly 重签</div></div>
+      <div class="go">下载 →</div>
+    </a>
+    <a class="dl c3" href="/download/REV-Flutter-source.zip" download>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>
+      <div class="meta"><div class="name">源码包</div><div class="desc">REV-Flutter-source.zip · Flutter 工程</div></div>
+      <div class="go">下载 →</div>
+    </a>
+  </div></div>
+</div>
+
+<div class="section">
+  <div class="stitle"><span class="bar"></span><h2>实时车队</h2><span class="en">Live Fleet</span></div>
+</div>
+<div class="section" style="padding-top:0"><div class="grid" id="grid"><div class="empty"><div class="emptybar"></div>等待车辆数据上报…</div></div></div>
+
+<footer>REV · 车机 OBD 实时仪表盘 &nbsp;|&nbsp; 数据走你自己的服务器，端到端可控 &nbsp;|&nbsp; <b>Drive it like you stole it.</b></footer>
 
 <script>
-let token = localStorage.getItem('rev_token') || '';
-let myName = localStorage.getItem('rev_name') || '';
-let myRole = localStorage.getItem('rev_role') || 'user';
-let es = null;
-let mode = 'login';
+// 工具函数必须最先定义：背景动画与后续逻辑都依赖它。
+const $=id=>document.getElementById(id);
+// 下载中心折叠/展开（默认收起，手机上不占位）。
+const dlTitle=$('dlTitle');
+dlTitle.addEventListener('click',()=>dlTitle.classList.toggle('open'));
+// ===== 背景速度线（赛车加速感） =====
+const cv=$('bgfx'), ctx=cv.getContext('2d'); let W,H,parts=[];
+function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight;
+  parts=Array.from({length:Math.min(70,innerWidth/22)},()=>({x:Math.random()*W,y:Math.random()*H,z:Math.random()*.9+.1}));}
+rs(); addEventListener('resize',rs);
+function loop(){
+  ctx.clearRect(0,0,W,H);
+  for(const p of parts){
+    p.x+= (p.z*7+1.5);
+    if(p.x>W){p.x=-20;p.y=Math.random()*H;}
+    const l=14+p.z*46;
+    ctx.strokeStyle=`rgba(25,227,255,${p.z*.22})`;
+    ctx.lineWidth=p.z*1.4;
+    ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+l,p.y);ctx.stroke();
+  }
+  requestAnimationFrame(loop);
+}
+loop();
 
-const $ = id => document.getElementById(id);
-
-function showOverlay(){ $('authOverlay').classList.remove('hidden'); $('authErr').textContent=''; }
-function hideOverlay(){ $('authOverlay').classList.add('hidden'); }
-
+// ===== 登录/注册/实时数据 =====
+let token=localStorage.getItem('rev_token')||'';
+let myName=localStorage.getItem('rev_name')||'';
+let myRole=localStorage.getItem('rev_role')||'user';
+let es=null,mode='login';
+function showOverlay(){$('authOverlay').classList.remove('hidden');$('authErr').textContent='';}
+function hideOverlay(){$('authOverlay').classList.add('hidden');}
 function setMode(m){
-  mode = m;
-  $('authSub').textContent = m === 'login' ? '登录后查看你名下的车辆实时数据' : '注册新账号，数据与账号绑定';
-  $('authBtn').textContent = m === 'login' ? '登 录' : '注 册';
-  $('switchLink').textContent = m === 'login' ? '注册新账号' : '已有账号？去登录';
-  $('authErr').textContent = '';
+  mode=m;
+  $('authSub').textContent=m==='login'?'登录后查看你名下的车辆实时数据':'注册新账号，数据与账号绑定';
+  $('authBtn').textContent=m==='login'?'登 录':'注 册';
+  $('switchLink').textContent=m==='login'?'注册新账号':'已有账号？去登录';
+  $('authErr').textContent='';
 }
-$('switchLink').onclick = () => setMode(mode === 'login' ? 'register' : 'login');
-
+$('switchLink').onclick=()=>setMode(mode==='login'?'register':'login');
 async function submitAuth(){
-  const u = $('inUser').value.trim(), p = $('inPass').value;
-  $('authErr').textContent = '';
-  if(!u || !p){ $('authErr').textContent = '请输入账号和密码'; return; }
-  const path = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+  const u=$('inUser').value.trim(),p=$('inPass').value;
+  $('authErr').textContent='';
+  if(!u||!p){$('authErr').textContent='请输入账号和密码';return;}
   try{
-    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({username:u, password:p})});
-    const j = await r.json();
-    if(!j.ok){ $('authErr').textContent = j.error || '操作失败'; return; }
-    token = j.token; myName = j.username; myRole = j.role;
-    localStorage.setItem('rev_token', token);
-    localStorage.setItem('rev_name', myName);
-    localStorage.setItem('rev_role', myRole);
+    const r=await fetch(mode==='login'?'/api/auth/login':'/api/auth/register',
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const j=await r.json();
+    if(!j.ok){$('authErr').textContent=j.error||'操作失败';return;}
+    token=j.token;myName=j.username;myRole=j.role;
+    localStorage.setItem('rev_token',token);
+    localStorage.setItem('rev_name',myName);
+    localStorage.setItem('rev_role',myRole);
     afterLogin();
-  }catch(e){ $('authErr').textContent = '网络错误，请重试'; }
+  }catch(e){$('authErr').textContent='网络错误，请重试';}
 }
-$('authBtn').onclick = submitAuth;
-$('inPass').addEventListener('keydown', e => { if(e.key === 'Enter') submitAuth(); });
-
+$('authBtn').onclick=submitAuth;
+$('inPass').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth();});
 async function logout(){
-  try{ await fetch('/api/auth/logout', {method:'POST', headers:{'Authorization':'Bearer '+token}}); }catch(e){}
-  token=''; myName=''; myRole='user';
-  localStorage.removeItem('rev_token'); localStorage.removeItem('rev_name'); localStorage.removeItem('rev_role');
-  if(es){ es.close(); es=null; }
-  store.clear(); render();
-  showOverlay(); setMode('login');
+  try{await fetch('/api/auth/logout',{method:'POST',headers:{'Authorization':'Bearer '+token}});}catch(e){}
+  token='';myName='';myRole='user';
+  ['rev_token','rev_name','rev_role'].forEach(k=>localStorage.removeItem(k));
+  if(es){es.close();es=null;}
+  store.clear();render();showOverlay();setMode('login');
 }
-$('logoutBtn').onclick = logout;
-
+$('logoutBtn').onclick=logout;
 function afterLogin(){
   hideOverlay();
-  $('whoName').textContent = myName;
-  $('whoRole').textContent = myRole === 'admin' ? '管理员' : '普通用户';
-  $('whoRole').className = 'role' + (myRole === 'admin' ? ' admin' : '');
-  if(es){ es.close(); }
-  store.clear();
-  fetchAll(); connectSSE();
+  $('whoName').textContent=myName;
+  $('whoRole').textContent=myRole==='admin'?'管理员':'普通用户';
+  $('whoRole').className='role'+(myRole==='admin'?' admin':'');
+  if(es)es.close();
+  store.clear();fetchAll();connectSSE();
 }
-
-function tempClass(v){ if(v==null) return ''; if(v>105) return 'bad'; if(v>95) return 'warn'; return 'ok'; }
-function voltClass(v){ if(v==null) return ''; if(v<12.5) return 'bad'; if(v>14.6) return 'warn'; return 'ok'; }
-function gearLabel(g){ return g==null?'--':(g===0?'N':(g<0?'R':g)); }
-function row(k,v,cls){ return `<div class="row"><span class="k">${k}</span><span class="v num ${cls||''}">${v==null?'--':v}</span></div>`; }
-function ago(ts){ const s=Math.floor((Date.now()-ts)/1000); return s<60?s+' 秒前':Math.floor(s/60)+' 分前'; }
+function tempClass(v){if(v==null)return'';if(v>105)return'bad';if(v>95)return'warn';return'ok';}
+function voltClass(v){if(v==null)return'';if(v<12.5)return'bad';if(v>14.6)return'warn';return'ok';}
+function gearLabel(g){return g==null?'--':(g===0?'N':(g<0?'R':g));}
+function row(k,v,cls){return`<div class="row"><span class="k">${k}</span><span class="v num ${cls||''}">${v==null?'--':v}</span></div>`;}
+function ago(ts){const s=Math.floor((Date.now()-ts)/1000);return s<60?s+' 秒前':Math.floor(s/60)+' 分前';}
 const SRC={obd:['实车 OBD','obd'],demo:['演示','demo'],game:['游戏遥测','game'],gps:['GPS 估算','gps']};
-
-const store = new Map();
-function upsert(d){ if(d && d.deviceId) store.set(d.deviceId, d); }
-function setLive(ok){
-  $('liveDot').className = 'dot' + (ok ? ' online' : ' stale');
-  $('liveTxt').textContent = ok ? '实时推送中' : '重连中…';
-}
-
+const store=new Map();
+function upsert(d){if(d&&d.deviceId)store.set(d.deviceId,d);}
+function setLive(ok){$('liveDot').className='dot'+(ok?' online':' stale');$('liveTxt').textContent=ok?'实时推送中':'重连中…';}
 function cardHtml(d){
-  const s = SRC[d.source]||['实车 OBD','obd'];
-  const stale = (Date.now()-d.ts)>10000;
-  const online = d.connected && !stale;
-  const ownerLine = (myRole === 'admin' && d.owner) ? `<span class="owner">车主：${d.owner}</span>` : '';
-  const badge = online ? `<span class="badge ${s[1]}">${s[0]}</span>`
-                       : `<span class="badge off">${s[0]} · 离线</span>`;
-  const cardCls = d.source==='demo' ? 'demo' : (d.source==='game'||d.source==='gps' ? d.source : '');
+  const s=SRC[d.source]||['实车 OBD','obd'];
+  const stale=(Date.now()-d.ts)>10000;
+  const online=d.connected&&!stale;
+  const ownerLine=(myRole==='admin'&&d.owner)?`<span class="owner">车主：${d.owner}</span>`:'';
+  const badge=online?`<span class="badge ${s[1]}">${s[0]}</span>`:`<span class="badge off">${s[0]} · 离线</span>`;
+  const cardCls=d.source==='demo'?'demo':(d.source==='game'||d.source==='gps'?d.source:'');
   return `
-    <div class="card ${cardCls} ${online?'':'offline'}">
-      <div class="head">
-        <div class="devid">${d.deviceId}${ownerLine}</div>
-        <div class="srcgroup">${badge}<span class="age">${ago(d.ts)}</span></div>
+  <div class="card ${cardCls} ${online?'':'offline'}">
+    <div class="head">
+      <div class="devid">${d.deviceId}${ownerLine}</div>
+      <div class="srcgroup">${badge}<span class="age">${ago(d.ts)}</span></div>
+    </div>
+    <div class="hero">
+      <div class="speed num">${Math.round(d.speed??0)}<small>KM/H</small></div>
+      <div class="gear num"><small>GEAR</small>${gearLabel(d.gear)}</div>
+    </div>
+    <div class="cols">
+      <div>
+        ${row('转速',d.rpm?d.rpm:'--')}
+        ${row('水温',d.coolant==null?'--':d.coolant+'°',tempClass(d.coolant))}
+        ${row('油温',d.oilTemp==null?'--':d.oilTemp+'°',tempClass(d.oilTemp))}
+        ${row('进气温度',d.intakeTemp==null?'--':d.intakeTemp+'°',tempClass(d.intakeTemp))}
+        ${row('环境温度',d.ambient==null?'--':d.ambient+'°')}
+        ${row('电压',d.voltage==null?'--':d.voltage,voltClass(d.voltage))}
       </div>
-      <div class="hero">
-        <div class="speed num">${Math.round(d.speed??0)}<small>KM/H</small></div>
-        <div class="gear num"><small>GEAR</small>${gearLabel(d.gear)}</div>
+      <div>
+        ${row('增压',d.boost==null?'--':d.boost+' bar','teal')}
+        ${row('负荷',d.load==null?'--':d.load+'%')}
+        ${row('节气门',d.throttle==null?'--':d.throttle+'%')}
+        ${row('空气流量',d.maf==null?'--':d.maf+' g/s','teal')}
+        ${row('瞬时油耗',d.fuelRate==null?'--':d.fuelRate,'ok')}
+        ${row('油位',d.fuelLevel==null?'--':d.fuelLevel+'%')}
       </div>
-      <div class="rows">
-        ${row('转速', d.rpm?d.rpm+' rpm':'--')}
-        ${row('水温', d.coolant==null?'--':d.coolant+' °C', tempClass(d.coolant))}
-        ${row('油温', d.oilTemp==null?'--':d.oilTemp+' °C', tempClass(d.oilTemp))}
-        ${row('进气温度', d.intakeTemp==null?'--':d.intakeTemp+' °C', tempClass(d.intakeTemp))}
-        ${row('环境温度', d.ambient==null?'--':d.ambient+' °C')}
-        ${row('电压', d.voltage==null?'--':d.voltage+' V', voltClass(d.voltage))}
-        ${row('增压', d.boost==null?'--':d.boost+' bar', 'teal')}
-        ${row('负荷', d.load==null?'--':d.load+' %')}
-        ${row('节气门', d.throttle==null?'--':d.throttle+' %')}
-        ${row('空气流量', d.maf==null?'--':d.maf+' g/s', 'teal')}
-        ${row('瞬时油耗', d.fuelRate==null?'--':d.fuelRate+' L/100km', 'ok')}
-        ${row('油位', d.fuelLevel==null?'--':d.fuelLevel+' %')}
-      </div>
-      <div class="rows">
-        ${row('行程里程', d.tripKm==null?'--':d.tripKm+' km')}
-        ${row('行程油耗', d.tripFuel==null?'--':d.tripFuel+' L')}
-        ${row('行程用时', d.tripSec==null?'--':Math.round(d.tripSec)+' s')}
-      </div>
-      ${d.lat!=null?`<div class="map"><a target="_blank" href="https://uri.amap.com/marker?position=${d.lng},${d.lat}">📍 ${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}（高德地图）</a></div>`
-        :`<div class="nogps">${d.source==='demo'?'演示模式 · 无 GPS':'无 GPS 位置'}</div>`}
-    </div>`;
+    </div>
+    ${d.lat!=null?`<div class="map"><a target="_blank" href="https://uri.amap.com/marker?position=${d.lng},${d.lat}">📍 ${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}（高德地图）</a></div>`
+      :`<div class="nogps">${d.source==='demo'?'演示模式 · 无 GPS':'无 GPS 位置'}</div>`}
+  </div>`;
 }
-
 function render(){
-  const list = [...store.values()].sort((a,b)=>b.ts-a.ts);
-  const online = list.filter(d => d.connected && (Date.now()-d.ts)<=10000);
-  $('count').textContent = online.length;
-  const grid = $('grid');
-  if(!list.length){
-    grid.innerHTML='<div class="empty"><div class="emptybar"></div>等待车辆数据上报…（登录后，你名下的车辆会实时出现在这里）</div>';
-    return;
-  }
-  grid.innerHTML = list.map(cardHtml).join('');
+  const list=[...store.values()].sort((a,b)=>b.ts-a.ts);
+  const online=list.filter(d=>d.connected&&(Date.now()-d.ts)<=10000);
+  $('count').textContent=online.length;
+  const g=$('grid');
+  if(!list.length){g.innerHTML='<div class="empty"><div class="emptybar"></div>等待车辆数据上报…（登录后，你名下的车会实时出现在这里）</div>';return;}
+  g.innerHTML=list.map(cardHtml).join('');
 }
-
 async function fetchAll(){
-  if(!token) return;
+  if(!token)return;
   try{
-    const r = await fetch('/api/v1/devices?token='+encodeURIComponent(token));
-    if(r.status === 401){ logout(); return; }
-    const list = await r.json();
-    list.forEach(upsert); render();
+    const r=await fetch('/api/v1/devices?token='+encodeURIComponent(token));
+    if(r.status===401){logout();return;}
+    (await r.json()).forEach(upsert);render();
   }catch(e){}
 }
-
 function connectSSE(){
-  if(!token) return;
-  es = new EventSource('/api/v1/stream?token='+encodeURIComponent(token));
-  es.addEventListener('snapshot', e => {
-    try{ const list = JSON.parse(e.data); list.forEach(upsert); render(); setLive(true); }catch(_){}
-  });
-  es.addEventListener('frame', e => {
-    try{ upsert(JSON.parse(e.data)); render(); setLive(true); }catch(_){}
-  });
-  es.onopen = ()=>setLive(true);
-  es.onerror = ()=>setLive(false);
+  if(!token)return;
+  es=new EventSource('/api/v1/stream?token='+encodeURIComponent(token));
+  es.addEventListener('snapshot',e=>{try{JSON.parse(e.data).forEach(upsert);render();setLive(true);}catch(_){}});
+  es.addEventListener('frame',e=>{try{upsert(JSON.parse(e.data));render();setLive(true);}catch(_){}});
+  es.onopen=()=>setLive(true);es.onerror=()=>setLive(false);
 }
-
-setInterval(render, 1000);
-setInterval(fetchAll, 10000);
-
-if(token){ afterLogin(); } else { showOverlay(); setMode('login'); }
+setInterval(render,1000);setInterval(fetchAll,10000);
+if(token){afterLogin();}else{showOverlay();setMode('login');}
 </script>
 </body>
 </html>

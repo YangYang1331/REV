@@ -5,6 +5,7 @@ import 'package:obd_dashboard/services/auth_service.dart';
 import 'package:obd_dashboard/services/cloud_service.dart';
 import 'package:obd_dashboard/services/obd_service.dart';
 import 'package:obd_dashboard/services/sound_service.dart';
+import 'package:obd_dashboard/services/tts_service.dart';
 import 'package:obd_dashboard/services/telemetry_service.dart';
 
 /// 全局遥测服务（演示 / 真实统一入口）。
@@ -43,6 +44,8 @@ final cloudServiceProvider = Provider<CloudService>((ref) {
   // 同理 auth 也用 read：登录/退出时其字段原地更新，定时器读取即为最新态。
   final auth = ref.read(authProvider);
   SoundService.instance.init();
+  // 初始化 TTS（Trigger 语音播报用；无引擎设备自动跳过，不影响主流程）。
+  TtsService.instance.init();
 
   cloud.init().then((_) async {
     cloud.startGps();

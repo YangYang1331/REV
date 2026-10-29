@@ -44,6 +44,7 @@ dependencies:
 
   # 可编辑拖拽磁贴看板
   reorderable_grid_view: ^2.2.8
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_lints: ^3.0.0

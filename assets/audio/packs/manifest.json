@@ -209,6 +209,7 @@
       "name": "马自达 RX-7/8 转子",
       "turbo": false,
       "supercharged": false,
+      "rotary": true,
       "bands": [
         "idle",
         "low",

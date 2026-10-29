@@ -17,6 +17,7 @@ import 'package:obd_dashboard/services/csv_recorder.dart';
 import 'package:obd_dashboard/services/game_udp_service.dart';
 import 'package:obd_dashboard/services/gamepad_input_service.dart';
 import 'package:obd_dashboard/services/logcat_channel.dart';
+import 'package:obd_dashboard/services/tts_service.dart';
 
 /// 扩展实验室：游戏 UDP / 手柄换挡 / 自动圈速 / 车机直连 / CSV / Trigger /
 /// OLED 省电 / 限速 / 马力估算 的统一入口。
@@ -70,12 +71,22 @@ class _LabScreenState extends ConsumerState<LabScreen> {
     final tele = ref.read(telemetryProvider);
     final d = tele.current;
     if (_csv.isRecording) _csv.feed(d);
-    _engine.update(TriggerSample(
+    final outcome = _engine.update(TriggerSample(
       coolant: d.coolant,
       rpm: d.rpm.toDouble(),
       voltage: d.voltage,
       speed: d.speed,
     ));
+    // 真实 TTS：仅在规则穿越边沿播报一次，不重复刷屏。
+    if (outcome.justFired.announce) {
+      final msg = _engine.rules
+          .where((r) =>
+              outcome.activeIds.contains(r.id) && r.action.announce)
+          .map((r) => _announceText(r))
+          .where((s) => s.isNotEmpty)
+          .join('；');
+      if (msg.isNotEmpty) TtsService.instance.speak(msg);
+    }
     // 自动圈速：用 GPS 经纬度。
     final lat = tele.lastLat;
     final lng = tele.lastLng;
@@ -87,6 +98,19 @@ class _LabScreenState extends ConsumerState<LabScreen> {
       }
     }
     if (mounted) setState(() {});
+  }
+
+  /// 根据触发规则生成口语化播报文案。
+  String _announceText(TriggerRule r) {
+    final metricName = switch (r.metric) {
+      TriggerMetric.coolant => '水温',
+      TriggerMetric.rpm => '转速',
+      TriggerMetric.voltage => '电压',
+      TriggerMetric.speed => '车速',
+      TriggerMetric.oilTemp => '油温',
+    };
+    final dir = r.op == TriggerOp.above ? '过高' : '过低';
+    return '$metricName$dir，请注意';
   }
 
   @override
@@ -265,10 +289,20 @@ class _LabScreenState extends ConsumerState<LabScreen> {
           _section(skin, 'Trigger → Action'),
           const ListTile(
             dense: true,
-            title: Text('默认规则：水温>105℃ 红屏；转速>6800 换挡灯',
+            title: Text('默认规则：水温>105℃ 红屏并语音；转速>6800 换挡灯',
                 style: TextStyle(color: Colors.white, fontSize: 13)),
-            subtitle: Text('动作事件已产出；TTS 语音播报需 flutter_tts 插件（受"不动 pubspec"约束暂以事件占位）',
-                style: TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+            subtitle: Text('越过阈值时走系统 TTS 语音播报（仅触发一次，回落自动复位）',
+                style: TextStyle(color: Colors.white38, fontSize: 11)),
+          ),
+          SwitchListTile(
+            dense: true,
+            secondary: const Icon(Icons.record_voice_over,
+                color: Color(0xFF27D6E6), size: 20),
+            title: const Text('语音播报开关',
+                style: TextStyle(color: Colors.white, fontSize: 13)),
+            value: TtsService.instance.isEnabled,
+            onChanged: (v) => setState(
+                () => TtsService.instance.setEnabled(v)),
           ),
           _section(skin, 'OLED 省电 / 限速 / 马力估算'),
           SwitchListTile(

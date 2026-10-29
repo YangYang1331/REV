@@ -178,6 +178,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right, color: Colors.white24),
             onTap: () => _pickAudioQuality(context),
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.air, color: Color(0xFFFF6B3D)),
+            title: const Text('环境声（风噪/胎噪，随车速）',
+                style: TextStyle(color: Colors.white)),
+            subtitle: const Text('车速越快风噪胎噪越大，熄火滑行也有，增强临场感',
+                style: TextStyle(color: Colors.white38, fontSize: 11)),
+            value: EngineSoundService.instance.envEnabled,
+            activeColor: const Color(0xFF27D6E6),
+            onChanged: (v) async {
+              await EngineSoundService.instance.setEnvEnabled(v);
+              setState(() {});
+            },
+          ),
           _header('账号 · 车队看板'),
           Consumer(builder: (context, wref, _) {
             final auth = wref.watch(authProvider);

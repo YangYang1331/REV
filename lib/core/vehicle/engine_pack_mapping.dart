@@ -13,6 +13,7 @@ class EnginePackManifest {
     required this.name,
     this.turbo = false,
     this.supercharged = false,
+    this.rotary = false,
     this.bands = const ['idle', 'low', 'mid', 'high', 'bounce'],
     this.hasPop = false,
     this.hasBlowoff = false,
@@ -28,6 +29,9 @@ class EnginePackManifest {
 
   /// 机械增压：转速上升时 one_whine 渐强。
   final bool supercharged;
+
+  /// 转子发动机：叠加一路随转速持续变调的高频啸叫（转子嗡嗡声）。
+  final bool rotary;
 
   /// 循环段 band id 列表。
   final List<String> bands;
@@ -46,6 +50,7 @@ class EnginePackManifest {
         name: j['name']?.toString() ?? '',
         turbo: j['turbo'] == true,
         supercharged: j['supercharged'] == true,
+        rotary: j['rotary'] == true,
         bands: (j['bands'] as List<dynamic>? ?? const [])
             .map((e) => e.toString())
             .toList(),

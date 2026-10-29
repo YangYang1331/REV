@@ -471,7 +471,11 @@ class TelemetryService extends ChangeNotifier {
     // 模拟声浪：所有模式（real/gps/demo）统一喂同一 rpm；gps 即按齿比
     // 反推的虚拟转速。平台层自己判熄火/duck，异常静默，绝不影响数据流。
     try {
-      EngineSoundService.instance.feedFrame(enriched.rpm.toDouble(), now);
+      EngineSoundService.instance.feedFrame(
+        enriched.rpm.toDouble(),
+        now,
+        speedKmh: enriched.speed,
+      );
     } catch (_) {}
   }
 

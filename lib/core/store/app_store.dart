@@ -50,6 +50,7 @@ class AppStore {
   static const _kEngineSoundEnabled = 'rev_engine_sound_enabled';
   static const _kEnginePack = 'rev_engine_pack';
   static const _kEngineAudioQuality = 'rev_audio_quality';
+  static const _kEnvSoundEnabled = 'rev_env_sound_enabled';
   static const _kDataMode = 'rev_data_mode';
   static const _kHorizonFx = 'rev_horizon_fx';
   static const _kVideoSplash = 'rev_video_splash';
@@ -251,6 +252,12 @@ class AppStore {
       (await _prefs).getString(_kEngineAudioQuality) ?? 'auto';
   Future<void> setEngineAudioQuality(String v) async =>
       (await _prefs).setString(_kEngineAudioQuality, v);
+
+  /// 环境声（风噪/胎噪，随车速）开关，默认开启。
+  Future<bool> getEnvSoundEnabled() async =>
+      (await _prefs).getBool(_kEnvSoundEnabled) ?? true;
+  Future<void> setEnvSoundEnabled(bool v) async =>
+      (await _prefs).setBool(_kEnvSoundEnabled, v);
 
   // ---- 数据源模式（'demo' 本地模拟 / 'real' 真实 OBD，默认 demo）----
   Future<String> getDataMode() async =>

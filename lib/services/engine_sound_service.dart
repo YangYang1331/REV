@@ -53,11 +53,25 @@ class EngineSoundService {
   Timer? _pump;
 
   double _pendingRpm = 0;
+  double _pendingSpeed = 0; // 车速 kmh（驱动风噪/胎噪）
   double _fade = 0; // 0..1 淡入/淡出
   double _fadeTarget = 1;
+  bool _envEnabled = true; // 风噪/胎噪开关
+  double _envWindGain = 0; // 平滑后的风噪/胎噪音量
+  double _envRoadGain = 0;
 
   // ---- SoLoud 对象 ----
   Bus? _bus;
+  // 环境声（风噪/胎噪）独立 bus，与引擎声物理隔离，车在动就响（熄火滑行也有）。
+  Bus? _windBus;
+  Bus? _roadBus;
+  AudioSource? _windSrc;
+  AudioSource? _roadSrc;
+  SoundHandle? _windHandle;
+  SoundHandle? _roadHandle;
+  // 转子持续高频啸叫（随转速变调）。
+  AudioSource? _rotaryWhineSrc;
+  SoundHandle? _rotaryWhineHandle;
   final List<_Voice> _voices = [
     _Voice(order: 0.5, isSaw: false),
     _Voice(order: 1.0, isSaw: false),
@@ -113,6 +127,7 @@ class EngineSoundService {
       _prefEnabled = await AppStore.instance.getEngineSoundEnabled();
       _packId = await AppStore.instance.getEnginePack();
       _audioQuality = parseAudioQuality(await AppStore.instance.getEngineAudioQuality());
+      _envEnabled = await AppStore.instance.getEnvSoundEnabled();
     } catch (_) {
       _prefEnabled = false;
       _packId = 'synth';
@@ -223,10 +238,23 @@ class EngineSoundService {
     _ducking = d;
   }
 
-  /// 遥测每帧喂 rpm（real/gps/demo 统一；gps 即虚拟 rpm）。
-  void feedFrame(double rpm, int nowMs) {
+  /// 设置页环境声（风噪/胎噪）开关：持久化 + 立即生效。
+  Future<void> setEnvEnabled(bool v) async {
+    _envEnabled = v;
+    try {
+      await AppStore.instance.setEnvSoundEnabled(v);
+    } catch (_) {}
+  }
+
+  bool get envEnabled => _envEnabled;
+
+  /// 遥测每帧喂 rpm + 车速（real/gps/demo 统一；gps 即虚拟 rpm）。
+  /// rpm 驱动引擎声，speedKmh 驱动风噪/胎噪（车在动就有环境声）。
+  void feedFrame(double rpm, int nowMs, {double speedKmh = 0}) {
     if (!_active || _life == null || _mapper == null) return;
     _pendingRpm = rpm;
+    if (speedKmh < 0) speedKmh = 0;
+    _pendingSpeed = speedKmh;
     // 采样模式：算 drpm/s 并跑 one-shot 决策。
     double drpmPerSec = 0;
     if (_lastRpmAt > 0) {
@@ -294,6 +322,8 @@ class EngineSoundService {
     // 3) 按所选包装载发声源：采样包 → 循环段；否则 → 振荡器合成。
     if (_soloudReady) {
       await _reloadPackSources();
+      // 环境声（风噪/胎噪）bus 与噪声循环。
+      await _ensureEnvSources();
     }
 
     // 3) SoLoud 没起来 → 兜底 audioplayers 常驻循环。
@@ -338,10 +368,24 @@ class EngineSoundService {
         SoLoud.instance.stop(h);
       }
     } catch (_) {}
+    // 停转子啸叫（源保留，便于快速重开）。
+    try {
+      if ((_rotaryWhineHandle?.id ?? 0) > 0) {
+        SoLoud.instance.stop(_rotaryWhineHandle!);
+        _rotaryWhineHandle = null;
+      }
+    } catch (_) {}
+    // 停环境声（风噪/胎噪）。
+    try {
+      if ((_windHandle?.id ?? 0) > 0) SoLoud.instance.stop(_windHandle!);
+      if ((_roadHandle?.id ?? 0) > 0) SoLoud.instance.stop(_roadHandle!);
+      _windHandle = _roadHandle = null;
+    } catch (_) {}
     try {
       await _fbPlayer.stop();
     } catch (_) {}
     _usingFallback = false;
+    _envWindGain = _envRoadGain = 0;
     _pump?.cancel();
     _pump = null;
     _active = false;
@@ -360,6 +404,26 @@ class EngineSoundService {
         await SoLoud.instance.disposeSource(_noiseSource!);
         _noiseSource = null;
       }
+      // 转子啸叫源。
+      if (_rotaryWhineSrc != null) {
+        await SoLoud.instance.disposeSource(_rotaryWhineSrc!);
+        _rotaryWhineSrc = null;
+        _rotaryWhineHandle = null;
+      }
+      // 环境声源与 bus。
+      if (_windSrc != null) {
+        await SoLoud.instance.disposeSource(_windSrc!);
+        _windSrc = null;
+      }
+      if (_roadSrc != null) {
+        await SoLoud.instance.disposeSource(_roadSrc!);
+        _roadSrc = null;
+      }
+      _windBus?.dispose();
+      _windBus = null;
+      _roadBus?.dispose();
+      _roadBus = null;
+      _windHandle = _roadHandle = null;
       _bus?.dispose();
       _bus = null;
       if (SoLoud.instance.isInitialized) {
@@ -369,6 +433,40 @@ class EngineSoundService {
       debugPrint('soloud deinit failed (ignored): $e');
     }
     _soloudReady = false;
+  }
+
+  /// 创建环境声（风噪/胎噪）bus 与噪声循环。SoLoud ready 后调用，幂等。
+  /// 风噪 = bandpass 噪声（呼呼声，随车速抬频率/音量）；
+  /// 胎噪 = lowpass 噪声（低频隆隆，随车速）。
+  Future<void> _ensureEnvSources() async {
+    if (!_soloudReady) return;
+    final soloud = SoLoud.instance;
+    try {
+      if (_windBus == null) {
+        _windBus = soloud.createMixingBus(name: 'wind');
+        _windBus!.filters.biquadFilter.type().value = 2; // bandpass
+        _windBus!.filters.biquadFilter.resonance().value = 0.8;
+        _windBus!.filters.biquadFilter.frequency().value = 700;
+        _windBus!.playOnEngine(volume: 0.5);
+      }
+      if (_roadBus == null) {
+        _roadBus = soloud.createMixingBus(name: 'road');
+        _roadBus!.filters.biquadFilter.type().value = 0; // lowpass
+        _roadBus!.filters.biquadFilter.resonance().value = 0.5;
+        _roadBus!.filters.biquadFilter.frequency().value = 450;
+        _roadBus!.playOnEngine(volume: 0.5);
+      }
+      _windSrc ??= await soloud.loadMem('rev_wind_noise.wav', _makeNoiseWav());
+      _roadSrc ??= await soloud.loadMem('rev_road_noise.wav', _makeNoiseWav());
+      if ((_windHandle?.id ?? 0) <= 0) {
+        _windHandle = _windBus!.play(_windSrc!, volume: 0.0001, looping: true);
+      }
+      if ((_roadHandle?.id ?? 0) <= 0) {
+        _roadHandle = _roadBus!.play(_roadSrc!, volume: 0.0001, looping: true);
+      }
+    } catch (e) {
+      debugPrint('env sound sources failed (ignored): $e');
+    }
   }
 
   /// 在 engineBus 上启动全部声部（引擎 alive 且未在发声时调用）。
@@ -439,6 +537,39 @@ class EngineSoundService {
       if (_loopSources.isEmpty) {
         await _loadSynthSourcesLocked();
       }
+    }
+    await _syncRotaryWhine();
+  }
+
+  /// 转子包：创建一路持续高频锯齿啸叫并挂到 engine bus；非转子：销毁。
+  Future<void> _syncRotaryWhine() async {
+    final need = _activePack?.rotary == true;
+    try {
+      if (need) {
+        if (_rotaryWhineSrc == null) {
+          _rotaryWhineSrc = await SoLoud.instance.loadWaveform(
+            WaveForm.saw,
+            false,
+            1.0,
+            0.0,
+          );
+        }
+        if ((_rotaryWhineHandle?.id ?? 0) <= 0) {
+          _rotaryWhineHandle =
+              _bus?.play(_rotaryWhineSrc!, volume: 0.0001);
+        }
+      } else {
+        if ((_rotaryWhineHandle?.id ?? 0) > 0) {
+          SoLoud.instance.stop(_rotaryWhineHandle!);
+          _rotaryWhineHandle = null;
+        }
+        if (_rotaryWhineSrc != null) {
+          await SoLoud.instance.disposeSource(_rotaryWhineSrc!);
+          _rotaryWhineSrc = null;
+        }
+      }
+    } catch (e) {
+      debugPrint('rotary whine sync failed (ignored): $e');
     }
   }
 
@@ -565,11 +696,40 @@ class EngineSoundService {
     _voicesRunning = false;
   }
 
+  /// 环境声参数泵：按车速驱动风噪/胎噪的音量与滤波频率（50ms 平滑）。
+  void _pumpEnvSound() {
+    if ((_windHandle?.id ?? 0) <= 0 && (_roadHandle?.id ?? 0) <= 0) return;
+    final spd = _pendingSpeed;
+    // 风噪：约 40kmh 起、160kmh 接近饱和；胎噪：约 25kmh 起、120kmh 饱和。
+    final windT = ((spd - 40) / 120).clamp(0.0, 1.0);
+    final roadT = ((spd - 25) / 95).clamp(0.0, 1.0);
+    final duck = _ducking ? 0.5 : 1.0;
+    final windTarget = _envEnabled ? windT * 0.55 * duck : 0.0;
+    final roadTarget = _envEnabled ? roadT * 0.42 * duck : 0.0;
+    _envWindGain += (windTarget - _envWindGain) * 0.15;
+    _envRoadGain += (roadTarget - _envRoadGain) * 0.15;
+    try {
+      if ((_windHandle?.id ?? 0) > 0) {
+        SoLoud.instance.setVolume(_windHandle!, _envWindGain.clamp(0.0, 1.0));
+        // bandpass 中心频率随车速 600→1500Hz（风越高速越尖）。
+        _windBus?.filters.biquadFilter.frequency().value = 600 + windT * 900;
+      }
+      if ((_roadHandle?.id ?? 0) > 0) {
+        SoLoud.instance.setVolume(_roadHandle!, _envRoadGain.clamp(0.0, 1.0));
+        // lowpass 截止随车速 350→700Hz。
+        _roadBus?.filters.biquadFilter.frequency().value = 350 + roadT * 350;
+      }
+    } catch (_) {}
+  }
+
   // ---- 50ms 参数泵 ----
 
   void _pumpTick() {
     if (!_active || _mapper == null || _life == null) return;
     try {
+      // 环境声（风噪/胎噪）：独立于引擎淡出，车在动就响（熄火滑行也有）。
+      _pumpEnvSound();
+
       // 淡出接近完成且目标为 0 → 停声部一次。
       if (_fadeTarget == 0 && _fade < 0.03) {
         _fade = 0;
@@ -635,6 +795,16 @@ class EngineSoundService {
           _smoothSpeeds[band] = spd;
           try {
             SoLoud.instance.setRelativePlaySpeed(handle, spd);
+          } catch (_) {}
+        }
+        // 转子持续高频啸叫：随 t 从 700→3200Hz，音量随转速淡入。
+        if ((_rotaryWhineHandle?.id ?? 0) > 0 && _rotaryWhineSrc != null) {
+          try {
+            SoLoud.instance.setWaveformFreq(
+                _rotaryWhineSrc!, 700 + t * 2500);
+            SoLoud.instance.setVolume(
+                _rotaryWhineHandle!,
+                ((0.06 + t * 0.22) * _fade * duck).clamp(0.0, 1.0));
           } catch (_) {}
         }
       } else if (_soloudReady && _voicesRunning) {

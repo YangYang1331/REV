@@ -32,8 +32,12 @@ class SkinBackground extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (asset != null)
-              Image.asset(asset, fit: BoxFit.cover, alignment: Alignment.topCenter,
-                  cacheWidth: 1366),
+              Image.asset(asset,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                  // 不写死 cacheWidth：按图源原始分辨率解码，避免 1920 车机屏
+                  // 把 1366 宽的解码结果放大导致模糊。
+                  filterQuality: FilterQuality.medium),
             if (isPortrait && !useImage)
               DecoratedBox(
                 decoration: BoxDecoration(

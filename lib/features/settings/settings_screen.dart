@@ -248,8 +248,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             return ListTile(
               leading: const Icon(Icons.cloud_outlined, color: Color(0xFF27D6E6)),
               title: const Text('云服务器地址', style: TextStyle(color: Colors.white)),
-              subtitle: Text(cloud.endpoint,
-                  style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              subtitle: Text(
+                  cloud.needsUserServer
+                      ? '未配置：请填写你自己部署的服务器地址（留空则不上报、不检查更新）'
+                      : cloud.endpoint,
+                  style: TextStyle(
+                      color: cloud.needsUserServer
+                          ? Color(0xFFFFB4A8)
+                          : Colors.white38,
+                      fontSize: 11)),
               trailing: const Icon(Icons.edit, color: Colors.white24, size: 18),
               onTap: () => _editEndpoint(cloud),
             );
@@ -288,7 +295,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             leading: const Icon(Icons.science, color: Color(0xFFFF6B3D)),
             title: const Text('扩展实验室（游戏UDP/手柄/圈速/CSV/Trigger）',
                 style: TextStyle(color: Colors.white)),
-            subtitle: const Text('v2.14 新功能统一入口',
+            subtitle: const Text('v2.15 新功能统一入口',
                 style: TextStyle(color: Colors.white38, fontSize: 12)),
             trailing: const Icon(Icons.chevron_right, color: Colors.white24),
             onTap: () => Navigator.push(context,
@@ -299,7 +306,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             leading: const Icon(Icons.info_outline, color: Color(0xFF27D6E6)),
             title: const Text('REV 车机仪表盘', style: TextStyle(color: Colors.white)),
             subtitle: const Text(
-                'v2.14.0 · band 内连续变调 + 真实采样 22 套 · 采样音质高/低/自动三档 · OBD 自动协议+WiFi+坏帧过滤 · 故障码清除 · 电影感开屏 · 车队看板',
+                'v2.15.0 · band 内连续变调 + 真实采样 22 套 · 采样音质高/低/自动三档 · OBD 自动协议+WiFi+坏帧过滤 · 故障码清除 · 电影感开屏 · 车队看板 · 高清背景',
                 style: TextStyle(color: Colors.white38, fontSize: 12)),
           ),
           ListTile(
@@ -458,7 +465,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('正在检查更新…'), duration: Duration(seconds: 1)),
     );
-    const currentCode = 40;
+    const currentCode = 41;
     Map<String, dynamic>? rel;
     try {
       rel = await cloud.checkUpdate(currentCode);

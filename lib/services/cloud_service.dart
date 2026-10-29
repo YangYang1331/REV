@@ -14,24 +14,30 @@ import 'package:obd_dashboard/models/obd_data.dart';
 
 /// 云端服务：车辆数据上报（车队看板）+ GPS 轨迹 + 应用内更新。
 /// 移植自原生 com.ghost.cluster.cloud.CloudUploader / GpsTracker / Updater。
+///
+/// 服务器地址【不硬编码】：
+///  - 开源/默认构建：`defaultBase`/`defaultEndpoint` 为空，App 启动不自动上报，
+///    用户须在设置里填自己部署的服务器地址。
+///  - 自用构建：通过 `--dart-define=DEFAULT_BASE=... --dart-define=DEFAULT_ENDPOINT=...`
+///    注入，行为与现状一致。
 class CloudService {
   CloudService();
 
-  // v2.14.0：云上报改 HTTPS + 域名，不再硬编码阿里云 IP。
-  // 设置里用户已填的服务器地址优先；留空/仍是旧硬编码 IP 时回落到下面的默认值。
-  static const defaultBase = 'https://mayangyang.eu.cc';
-  static const defaultEndpoint = 'https://mayangyang.eu.cc/api/v1/report';
+  static const String defaultBase =
+      String.fromEnvironment('DEFAULT_BASE', defaultValue: '');
+  static const String defaultEndpoint =
+      String.fromEnvironment('DEFAULT_ENDPOINT', defaultValue: '');
   static const _kEndpoint = 'cloud_endpoint';
   static const _kDeviceId = 'cloud_device_id';
   static const _kOfflineQueue = 'rev_offline_queue';
   static const _maxQueue = 200;
 
-  /// v2.14.0 之前写死的旧明文 IP，迁移时统一替换为 HTTPS 默认域名。
-  static const _legacyEndpointPrefix = 'http://139.224.30.235:';
-
   String _endpoint = defaultEndpoint;
   String get endpoint => _endpoint;
   String get baseUrl => _endpoint.replaceAll(RegExp(r'/api/v1.*$'), '');
+
+  /// 未配置服务器地址：设置页提示用户填写自己部署的地址。
+  bool get needsUserServer => _endpoint.trim().isEmpty;
 
   String _deviceId = 'unknown';
   String get deviceId => _deviceId;
@@ -42,14 +48,13 @@ class CloudService {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    var saved = prefs.getString(_kEndpoint);
-    // 迁移：老用户此前被写入的旧硬编码明文 IP 一律升级到 HTTPS 默认域名；
-    // 用户自己另填过的自定义地址保留不动。
-    if (saved == null || saved.startsWith(_legacyEndpointPrefix)) {
-      saved = defaultEndpoint;
-      await prefs.setString(_kEndpoint, saved);
-    }
-    _endpoint = saved;
+    final saved = prefs.getString(_kEndpoint);
+    // 地址优先级：用户已填 > 自用构建注入的默认值 > 空（不自动上报）。
+    // 不做任何硬编码 IP/域名的迁移。
+    _endpoint = (saved != null && saved.isNotEmpty)
+        ? saved.trim()
+        : defaultEndpoint;
+
     var did = prefs.getString(_kDeviceId);
     if (did == null || did.isEmpty) {
       did = 'rev-${const Uuid().v4().replaceAll('-', '').substring(0, 12)}';
@@ -226,8 +231,9 @@ class CloudService {
 
   // ── 应用内更新 ──
   /// 返回 null 表示已是最新；否则返回 {versionCode,versionName,notes,apkUrl,...}。
-  /// baseUrl 同时支持 https 域名（如 https://mayangyang.eu.cc）与 IP:端口。
+  /// baseUrl 同时支持 https 域名与 IP:端口。开源版未配服务器时直接不检查。
   Future<Map<String, dynamic>?> checkUpdate(int currentCode) async {
+    if (_endpoint.trim().isEmpty) return null;
     try {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 6);

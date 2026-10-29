@@ -39,6 +39,13 @@ APK_OUT="$PROJECT_DIR/build/app/outputs/flutter-apk/app-release.apk"
 log() { echo -e "\033[1;36m[build_release]\033[0m $*"; }
 die() { echo -e "\033[1;31m[build_release][FATAL]\033[0m $*" >&2; exit 1; }
 
+# ---- 可选：自用服务器地址（开源构建默认空，不内置任何服务器）----
+# 自用打包时：
+#   export REV_DEFAULT_BASE="https://your-host"
+#   export REV_DEFAULT_ENDPOINT="https://your-host/api/v1/report"
+REV_DEFAULT_BASE="${REV_DEFAULT_BASE:-}"
+REV_DEFAULT_ENDPOINT="${REV_DEFAULT_ENDPOINT:-}"
+
 # ---- 前置检查 ----
 command -v flutter >/dev/null 2>&1 || die "flutter 不在 PATH，请先 source build_env.sh"
 [ -f "$KEY_PROPS" ] || die "缺少 $KEY_PROPS（正式签名密钥）。发布机必须配置证书 SHA-256=3a20ab19 的 keystore，参考 android/key.properties 模板。"
@@ -87,9 +94,15 @@ build_one() {
   local variant="$1" platforms="$2" out="$3" symdir="$4"
   log "构建 $out : BUILD_VARIANT=$variant target=$platforms"
   rm -f "$APK_OUT"
+  # 可选自用服务器地址：开源构建默认空（不连任何服务器）；自用打包前
+  # export REV_DEFAULT_BASE / REV_DEFAULT_ENDPOINT 即可注入。
+  local extra_defines=()
+  [ -n "${REV_DEFAULT_BASE:-}" ] && extra_defines+=(--dart-define=DEFAULT_BASE="$REV_DEFAULT_BASE")
+  [ -n "${REV_DEFAULT_ENDPOINT:-}" ] && extra_defines+=(--dart-define=DEFAULT_ENDPOINT="$REV_DEFAULT_ENDPOINT")
   flutter build apk --release \
     --target-platform "$platforms" \
     --dart-define=BUILD_VARIANT="$variant" \
+    "${extra_defines[@]}" \
     --obfuscate --split-debug-info="$PROJECT_DIR/$symdir"
   [ -f "$APK_OUT" ] || die "构建成功但找不到输出 APK: $APK_OUT"
   # 安全闸：拒绝 debug/profile 产物冒充 release
@@ -116,5 +129,12 @@ restore_hi
 
 # 3) arm64 单架构包（hi+lo，仅 arm64-v8a；务必先恢复 hi 再构建）
 build_one phone "android-arm64" "rev-arm64.apk" "build/symbols_arm64"
+
+# 4) 精简包（v2.15：lo-only + arm64 单 ABI + 压缩 .so，目标最小体积）
+strip_hi
+legacy_on
+build_one car "android-arm64" "rev-lite.apk" "build/symbols_lite"
+legacy_off
+restore_hi
 
 log "全部构建完成。下一步：bash scripts/release_check.py"

@@ -22,8 +22,8 @@ AAPT = f"{BT}/aapt"
 APKSIGNER = f"{BT}/apksigner"
 ZIPALIGN = f"{BT}/zipalign"
 
-EXPECT_VCODE = 40
-EXPECT_VNAME = "2.14.0"
+EXPECT_VCODE = 41
+EXPECT_VNAME = "2.15.0"
 EXPECT_PKG = "com.rev.cluster"
 EXPECT_MINSdk = 24
 EXPECT_CERT_PREFIX = "3f16feb"
@@ -240,8 +240,9 @@ def main():
     phone = os.path.join(DIST, "rev-latest.apk")
     car = os.path.join(DIST, "rev-car.apk")
     arm64 = os.path.join(DIST, "rev-arm64.apk")
+    lite = os.path.join(DIST, "rev-lite.apk")
 
-    print("REV release_check v2.14.0")
+    print("REV release_check v2.15.0")
     for tool in (AAPT, APKSIGNER, ZIPALIGN):
         if not os.path.exists(tool):
             fail(f"找不到构建工具: {tool}")
@@ -260,6 +261,10 @@ def main():
     # arm64 单架构包（手机 variant：hi+lo 齐全，仅 arm64-v8a）
     check_apk_base(arm64, "arm64 包 rev-arm64.apk", expect_extract_native=False)
     check_audio(arm64, want_hi=True, label="arm64 包")
+
+    # 精简包 rev-lite.apk：仅 lo + arm64 单 ABI + 压缩 .so（最小体积）
+    check_apk_base(lite, "精简包 rev-lite.apk", expect_extract_native=True)
+    check_audio(lite, want_hi=False, label="精简包")
 
     print("\n" + "=" * 56)
     if FAILS:

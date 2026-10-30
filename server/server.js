@@ -905,7 +905,9 @@ const handler = async (req, res) => {
   if (url.pathname === '/' || url.pathname === '/index.html') {
     const html = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8')
       .replace(/\/download\/([A-Za-z0-9._-]+)(?!\?v=)/g,
-        `/download/$1?v=${LATEST.versionCode}`);
+        `/download/$1?v=${LATEST.versionCode}`)
+      .replace(/__REV_VER__/g, LATEST.versionName)
+      .replace(/__REV_CODE__/g, String(LATEST.versionCode));
     return send(200, html,
       'text/html; charset=utf-8',
       { 'Content-Security-Policy': CSP_DASHBOARD, 'Cache-Control': 'no-cache' });

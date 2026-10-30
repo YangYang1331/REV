@@ -653,6 +653,7 @@ class TelemetryService extends ChangeNotifier {
 
   // ---- 行程 ----
   Future<TripRec> resetTrip() async {
+    final vehicleId = await AppStore.instance.getActiveVehicleId() ?? '';
     final rec = TripRec(
       ts: DateTime.now().millisecondsSinceEpoch - (_tripSec * 1000).round(),
       km: _tripKm,
@@ -663,6 +664,7 @@ class TelemetryService extends ChangeNotifier {
       harshBrake: _tripHarshB,
       idleSec: _tripIdleSec,
       violations: _tripViolations,
+      vehicleId: vehicleId,
       track: List<List<double>>.from(_tripTrack),
     );
     if (rec.km > 0.01 || rec.sec >= 10) {

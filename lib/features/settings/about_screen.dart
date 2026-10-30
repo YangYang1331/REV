@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:obd_dashboard/core/config/environment.dart';
@@ -29,7 +30,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             title: Text('REV 车机仪表盘',
                 style: TextStyle(color: Colors.white)),
             subtitle: Text(
-                'v${AppEnvironment.version} · 行程轨迹回放 / 驾驶评分 · 连接向导 · 报警语音 · 保养提醒 · 故障码维修建议 · 云端趋势 · 更多 PID',
+                'v${AppEnvironment.version} · 离线症状自查 / 油耗账本 / 多车车库 · 行程 GPX/KML · 诊断 PDF 报告 · 26 套声浪',
                 style: TextStyle(color: Colors.white38, fontSize: 12)),
           ),
           SettingsTile(
@@ -37,6 +38,12 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             title: '检查更新',
             subtitle: '从服务器获取最新版并下载安装',
             onTap: _checkUpdate,
+          ),
+          SettingsTile(
+            icon: Icons.link,
+            title: '手动下载最新版',
+            subtitle: '自动更新失败时，复制下载地址到浏览器打开',
+            onTap: _showManualDownload,
           ),
           const SettingsHeader('工具'),
           SettingsTile(
@@ -115,6 +122,109 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     );
   }
 
+  /// 当前构建的下载地址（未配置服务器时为空）。
+  String _apkUrl() {
+    final base = ref.read(cloudServiceProvider).baseUrl.trim();
+    return base.isEmpty
+        ? ''
+        : '$base/download/rev-latest.apk?v=${AppEnvironment.versionCode}';
+  }
+
+  /// 升级检查失败：明确告知"连不上"，并给出可手动安装的地址。
+  Future<void> _showUpdateFailed(Object e) async {
+    final apk = _apkUrl();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF11161D),
+        title: const Text('检查更新失败', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '当前版本 v${AppEnvironment.version}'
+          '（build ${AppEnvironment.versionCode}）\n'
+          '无法连接更新服务器：$e\n\n'
+          '${apk.isEmpty ? '尚未配置服务器地址，请到「设置 → 云端服务器」填写自建地址。' : '可复制下面的地址到浏览器手动下载：\n$apk'}',
+          style: const TextStyle(
+              color: Colors.white70, fontSize: 12, height: 1.5),
+        ),
+        actions: [
+          if (apk.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: apk));
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('下载地址已复制到剪贴板')),
+                  );
+                }
+              },
+              child: const Text('复制下载地址'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 手动下载入口：不依赖自动检查，直接给出网页与 APK 地址。
+  Future<void> _showManualDownload() async {
+    final apk = _apkUrl();
+    final page = apk.isEmpty ? '' : ref.read(cloudServiceProvider).baseUrl;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF11161D),
+        title: const Text('手动下载最新版', style: TextStyle(color: Colors.white)),
+        content: Text(
+          apk.isEmpty
+              ? '尚未配置服务器地址，无法给出下载地址。\n'
+                  '请到「设置 → 云端服务器」填写自建地址后再试。'
+              : '当前版本 v${AppEnvironment.version}'
+                  '（build ${AppEnvironment.versionCode}）\n\n'
+                  '下载页：\n$page\n\n'
+                  '最新安装包：\n$apk',
+          style: const TextStyle(
+              color: Colors.white70, fontSize: 12, height: 1.5),
+        ),
+        actions: [
+          if (apk.isNotEmpty) ...[
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: page));
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('下载页地址已复制')),
+                  );
+                }
+              },
+              child: const Text('复制下载页'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: apk));
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('安装包地址已复制')),
+                  );
+                }
+              },
+              child: const Text('复制 APK 地址'),
+            ),
+          ],
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _checkUpdate() async {
     final cloud = ref.read(cloudServiceProvider);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -126,15 +236,16 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
       rel = await cloud.checkUpdate(currentCode);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('检查更新失败：$e')),
-      );
+      await _showUpdateFailed(e);
       return;
     }
     if (!mounted) return;
     if (rel == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已是最新版本')),
+        SnackBar(
+          content: Text(
+              '已是最新版本 v${AppEnvironment.version}（build $currentCode）'),
+        ),
       );
       return;
     }

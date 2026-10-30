@@ -27,10 +27,12 @@ void main() {
       expect(await c.pendingCount(), 0);
     });
 
-    test('checkUpdate 在空端点下直接返回 null（不发请求）', () async {
+    test('checkUpdate 在空端点下抛出「未配置」而不是谎报已是最新', () async {
       final c = CloudService();
       await c.setEndpoint('');
-      expect(await c.checkUpdate(39), isNull);
+      // v2.17.1：空端点曾经返回 null，界面会显示"已是最新版本"，
+      // 用户因此永远升不了级。现在必须明确抛出，由 UI 提示未配置服务器。
+      await expectLater(c.checkUpdate(39), throwsA(isA<StateError>()));
     });
   });
 }

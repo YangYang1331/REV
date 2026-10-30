@@ -1,5 +1,5 @@
 /*
- * REV 云端服务 v2.16.2（历史趋势 + 车队共享 + viewer 角色）
+ * REV 云端服务 v2.17.1（历史趋势 + 车队共享 + viewer 角色）
  * 零依赖 Node.js（v18+，仅内置 http/fs/path/crypto/https）
  *
  * v2.16.0 新增：
@@ -391,8 +391,8 @@ function sweepDevices() {
 
 /* ---------------- 版本清单 ---------------- */
 const LATEST = {
-  versionCode: 53, versionName: '2.16.2',
-  notes: 'v2.16.2：深度诊断 + PDF 报告。①新增深度诊断页：排放就绪 I/M（Mode 01 PID 01，汽油/柴油位序）、待定故障码（Mode 07）、永久故障码（Mode 0A）、冻结帧（Mode 02 触发码 + 转速/车速/水温/负荷/电压快照）。②一键生成 A4 多页 PDF 诊断报告（车型/VIN/适配器/就绪状态/三类故障码中文释义与建议/冻结帧），每页用系统字体渲染后嵌入，不增加字体包体积。③设置目录重构延续 2.16.1。',
+  versionCode: 55, versionName: '2.17.1',
+  notes: 'v2.17.1：修「检查更新」把网络失败误报为“已是最新版本”（导致停在旧版）；新增手动下载入口（复制下载页 / APK 地址），看板 HTML 改 no-store 防旧版本缓存。v2.17.0：P1 四项。①诊断解读升级：深度诊断与 PDF 报告里的故障码补充严重度 / 能否继续开 / 参考费用 / 自查三步；新增离线症状自查（22 类常见症状 → 疑似故障码，纯本机规则库，不联网不上传）。②油耗与用车账本：加油记录、满箱到满箱长期油耗 / 每公里油费 / 趋势，保养 / 保险 / 年检到期提醒。③多车车库：多辆车独立车型档案 + VIN 自动识别，行程与加油记录按车归属，列表可切「当前车 / 全部」。④行程导出补齐 GPX / KML，新增同路线历史对比与行程合并 / 拆分。',
 };
 
 /* ---------------- 静态下载表 ---------------- */
@@ -910,7 +910,7 @@ const handler = async (req, res) => {
       .replace(/__REV_CODE__/g, String(LATEST.versionCode));
     return send(200, html,
       'text/html; charset=utf-8',
-      { 'Content-Security-Policy': CSP_DASHBOARD, 'Cache-Control': 'no-cache' });
+      { 'Content-Security-Policy': CSP_DASHBOARD, 'Cache-Control': 'no-store, must-revalidate' });
   }
   send(404, { ok: false, error: 'not found' });
 };
@@ -920,7 +920,7 @@ const server = http.createServer(handler);
 const server80 = http.createServer(handler);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`REV server v2.16.2 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
+  console.log(`REV server v2.17.1 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
 });
 
 server80.on('error', (e) => {

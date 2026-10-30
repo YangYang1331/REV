@@ -27,6 +27,9 @@ import 'package:obd_dashboard/features/dashboard/widgets/alarm_banner.dart';
 import 'package:obd_dashboard/features/alarm/alarm_settings_screen.dart';
 import 'package:obd_dashboard/features/dashboard/tiles/tiles_board_screen.dart';
 import 'package:obd_dashboard/features/maintenance/maintenance_screen.dart';
+import 'package:obd_dashboard/features/fuel/fuel_screen.dart';
+import 'package:obd_dashboard/features/garage/garage_screen.dart';
+import 'package:obd_dashboard/features/diagnostic/symptom_check_screen.dart';
 import 'package:obd_dashboard/features/diagnostic/data_stream_screen.dart';
 import 'package:obd_dashboard/features/health/health_report_screen.dart';
 import 'package:obd_dashboard/features/debug/debug_ball.dart';
@@ -175,6 +178,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         () => const _DataModeRoute()),
                     _menuTile(Icons.route, '行程记录', '里程 / 油耗历史 / 轨迹回放',
                         () => const TripsScreen()),
+                    _menuTile(Icons.local_gas_station_outlined, '油耗账本',
+                        '加油记录 / 长期油耗 / 养车到期提醒',
+                        () => const FuelScreen()),
                     _menuTile(Icons.speed, '性能测试', '零百 / 零四 / 刹车',
                         () => const PerfScreen()),
                     _menuTile(Icons.flag, '圈速计时', '赛道圈速 / 最佳记录',
@@ -182,6 +188,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     _menuHeader('诊断与养护'),
                     _menuTile(Icons.build, '诊断 / 故障码', 'DTC 读取 / 维修建议',
                         () => const DiagnosticScreen()),
+                    _menuTile(Icons.psychology_alt_outlined, '症状自查',
+                        '离线规则库：症状 → 疑似码 / 严重度 / 费用',
+                        () => const SymptomCheckScreen()),
                     _menuTile(Icons.troubleshoot, '深度诊断',
                         '排放就绪 / 待定码 / 永久码 / 冻结帧 / PDF 报告',
                         () => const DeepDiagnosticScreen()),
@@ -196,6 +205,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         '机油 / 轮胎 / 年检倒计时',
                         () => const MaintenanceScreen()),
                     _menuHeader('车辆与系统'),
+                    _menuTile(Icons.garage_outlined, '多车车库',
+                        '多辆车 / VIN 识别 / 每车独立历史',
+                        () => const GarageScreen()),
                     _menuTile(Icons.bluetooth, '连接车辆', '演示模式 / BLE',
                         () => const ConnectionScreen()),
                     _menuTile(Icons.settings_outlined, '设置',

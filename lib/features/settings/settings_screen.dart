@@ -6,6 +6,8 @@ import 'package:obd_dashboard/data/obd_providers.dart';
 import 'package:obd_dashboard/features/alarm/alarm_settings_screen.dart';
 import 'package:obd_dashboard/features/cloud/history_screen.dart';
 import 'package:obd_dashboard/features/connection/connect_wizard.dart';
+import 'package:obd_dashboard/features/fuel/fuel_screen.dart';
+import 'package:obd_dashboard/features/garage/garage_screen.dart';
 import 'package:obd_dashboard/features/maintenance/maintenance_screen.dart';
 import 'package:obd_dashboard/features/settings/about_screen.dart';
 import 'package:obd_dashboard/features/settings/appearance_screen.dart';
@@ -55,6 +57,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SettingsHeader('车辆'),
           SettingsTile(
+            icon: Icons.garage_outlined,
+            title: '多车车库',
+            subtitle: '多辆车独立档案 / VIN 自动识别 / 每车独立历史',
+            onTap: () => _open(const GarageScreen()),
+          ),
+          SettingsTile(
             icon: Icons.directions_car_outlined,
             title: '车辆与校准',
             subtitle: '车型档案：${t.profile.name} · VIN 识别 / 速度校准',
@@ -76,8 +84,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SettingsTile(
             icon: Icons.build_circle_outlined,
             title: '保养提醒',
-            subtitle: '机油 / 轮胎 / 年检按里程与日期倒计时',
+            subtitle: '机油 / 轮胎 / 年检 / 保险按里程与日期倒计时',
             onTap: () => _open(const MaintenanceScreen()),
+          ),
+          SettingsTile(
+            icon: Icons.local_gas_station_outlined,
+            title: '油耗与账本',
+            subtitle: '加油记录 / 长期油耗 / 养车花费',
+            onTap: () => _open(const FuelScreen()),
           ),
           const SettingsHeader('云端与账号'),
           SettingsTile(

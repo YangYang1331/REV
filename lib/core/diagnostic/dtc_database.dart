@@ -2245,6 +2245,9 @@ class DtcDatabase {
   /// 精确字典收录的故障码条数（供测试/统计使用，不影响查询 API）。
   static int get exactCount => _data.length;
 
+  /// 全部已收录的故障码（症状检索需要遍历标题/原因做关键词匹配）。
+  static Iterable<String> get codes => _data.keys;
+
   /// 解释任意故障码：优先精确字典；未收录时按 SAE J2012 / ISO 15031-6
   /// 的码位规则（系统位 + 标准/厂商位 + 子系统位）解析出标准分类与
   /// 通用说明，保证任何合法码都有解释、绝不留白。

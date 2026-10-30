@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:obd_dashboard/core/skin/skin_descriptor.dart';
 import 'package:obd_dashboard/core/skin/skin_provider.dart';
 import 'package:obd_dashboard/core/store/app_store.dart';
+import 'package:obd_dashboard/core/trips/track_export.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -81,6 +82,29 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
     }
   }
 
+  /// 导出本段轨迹为 GPX / KML（Google Earth、奥维、运动 App 都能导入）。
+  Future<void> _exportTrack(String kind) async {
+    if (_busy) return;
+    if (trip.track.length < 2) {
+      _toast('这段行程没有轨迹点，无法导出');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final f = File('${dir.path}/rev-trip-${trip.ts}.$kind');
+      final text =
+          kind == 'gpx' ? TrackExport.gpx(trip) : TrackExport.kml(trip);
+      await f.writeAsString(text);
+      _toast('已导出：${f.path.split('/').last}');
+      await OpenFilex.open(f.path);
+    } catch (e) {
+      _toast('导出失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// 把统计卡片截成 PNG，方便直接发群里（不依赖任何第三方分享库）。
   Future<void> _saveCard() async {
     if (_busy) return;
@@ -133,6 +157,24 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
             tooltip: '导出 CSV',
             onPressed: _busy ? null : _exportCsv,
             icon: const Icon(Icons.file_download_outlined),
+          ),
+          PopupMenuButton<String>(
+            tooltip: '导出轨迹',
+            enabled: !_busy,
+            icon: const Icon(Icons.route_outlined),
+            onSelected: _exportTrack,
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'gpx',
+                enabled: trip.track.length >= 2,
+                child: const Text('导出 GPX（轨迹）'),
+              ),
+              PopupMenuItem(
+                value: 'kml',
+                enabled: trip.track.length >= 2,
+                child: const Text('导出 KML（Google Earth）'),
+              ),
+            ],
           ),
           IconButton(
             tooltip: '生成分享卡片',

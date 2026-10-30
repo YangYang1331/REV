@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:obd_dashboard/core/garage/garage.dart';
 import 'package:obd_dashboard/core/skin/skin_provider.dart';
 import 'package:obd_dashboard/core/store/app_store.dart';
 import 'package:obd_dashboard/data/obd_providers.dart';
 import 'package:obd_dashboard/features/trips/trip_detail_screen.dart';
+import 'package:obd_dashboard/features/trips/trip_tools_screen.dart';
 
 class TripsScreen extends ConsumerStatefulWidget {
   const TripsScreen({super.key});
@@ -14,6 +16,9 @@ class TripsScreen extends ConsumerStatefulWidget {
 
 class _TripsScreenState extends ConsumerState<TripsScreen> {
   List<TripRec> _trips = [];
+  List<GarageVehicle> _vehicles = const [];
+  String? _activeId;
+  bool _showAll = false;
 
   @override
   void initState() {
@@ -23,7 +28,30 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
 
   Future<void> _load() async {
     final l = await AppStore.instance.loadTrips();
-    if (mounted) setState(() => _trips = l);
+    final v = await AppStore.instance.ensureGarage();
+    final active = await AppStore.instance.getActiveVehicleId();
+    if (mounted) {
+      setState(() {
+        _trips = l;
+        _vehicles = v;
+        _activeId = active;
+      });
+    }
+  }
+
+  /// 当前车辆的历史；老行程没有 vehicleId，归当前车辆。
+  List<TripRec> get _visible {
+    if (_showAll || _activeId == null) return _trips;
+    return _trips
+        .where((t) => t.vehicleId.isEmpty || t.vehicleId == _activeId)
+        .toList();
+  }
+
+  String get _activeName {
+    for (final v in _vehicles) {
+      if (v.id == _activeId) return v.name;
+    }
+    return '当前车辆';
   }
 
   String _fmtTime(int ts) {
@@ -78,6 +106,15 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
         title: const Text('行程记录'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.merge_type),
+            tooltip: '行程工具（对比 / 合并 / 拆分）',
+            onPressed: () async {
+              await Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const TripToolsScreen()));
+              await _load();
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_sweep),
             tooltip: '清空历史',
             onPressed: _clearHistory,
@@ -89,9 +126,27 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
         children: [
           _currentCard(d, t, skin),
           const SizedBox(height: 20),
+          if (_vehicles.length > 1) ...[
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: Text(_activeName, style: const TextStyle(fontSize: 11)),
+                  selected: !_showAll,
+                  onSelected: (_) => setState(() => _showAll = false),
+                ),
+                ChoiceChip(
+                  label: const Text('全部车辆', style: TextStyle(fontSize: 11)),
+                  selected: _showAll,
+                  onSelected: (_) => setState(() => _showAll = true),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
-              Text('历史行程（${_trips.length}）',
+              Text('历史行程（${_visible.length}）',
                   style: TextStyle(color: skin.dim, fontSize: 13, fontWeight: FontWeight.w600)),
               const Spacer(),
               FilledButton.icon(
@@ -102,7 +157,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          if (_trips.isEmpty)
+          if (_visible.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48),
               child: Center(
@@ -111,7 +166,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
               ),
             )
           else
-            ..._trips.map((r) => _tripCard(r)),
+            ..._visible.map((r) => _tripCard(r)),
         ],
       ),
     );

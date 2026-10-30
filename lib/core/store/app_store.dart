@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:obd_dashboard/core/fuel/fuel_log.dart';
+import 'package:obd_dashboard/core/garage/garage.dart';
+
 class TripRec {
   const TripRec({
     required this.ts,
@@ -13,11 +16,15 @@ class TripRec {
     this.idleSec = 0,
     this.violations = 0,
     this.track = const [],
+    this.vehicleId = '',
   });
   final int ts;
   final double km;
   final double fuel;
   final double sec;
+
+  /// 所属车辆（多车车库 id；空串是老数据，归当前车辆）。
+  final String vehicleId;
 
   /// 本段最高车速（km/h）。
   final double maxSpeed;
@@ -72,6 +79,7 @@ class TripRec {
         if (idleSec > 0) 'idle': idleSec,
         if (violations > 0) 'viol': violations,
         if (track.isNotEmpty) 'track': track,
+        if (vehicleId.isNotEmpty) 'veh': vehicleId,
       };
   factory TripRec.fromJson(Map<String, dynamic> j) => TripRec(
         ts: (j['ts'] as num?)?.toInt() ?? 0,
@@ -83,6 +91,7 @@ class TripRec {
         harshBrake: (j['hb'] as num?)?.toInt() ?? 0,
         idleSec: (j['idle'] as num?)?.toDouble() ?? 0,
         violations: (j['viol'] as num?)?.toInt() ?? 0,
+        vehicleId: j['veh'] as String? ?? '',
         track: (j['track'] as List?)
                 ?.whereType<List>()
                 .map((e) => e
@@ -127,6 +136,9 @@ class AppStore {
   static const _kGpsUpload = 'rev_gps_upload';
   static const _kCloudUpload = 'rev_cloud_upload';
   static const _kLastVin = 'rev_last_vin';
+  static const _kGarage = 'rev_garage';
+  static const _kActiveVehicle = 'rev_active_vehicle';
+  static const _kFuel = 'rev_fuel';
 
   /// 隐私政策版本：用户同意的版本号必须 >= 该值才会放行。
   /// 条款有实质变化时 +1，老用户会被重新询问一次。
@@ -256,6 +268,92 @@ class AppStore {
   Future<void> clearTrips() async {
     final p = await _prefs;
     await p.remove(_kTrips);
+  }
+
+  /// 整体覆盖行程列表（合并 / 拆分 / 删除后调用）。
+  Future<void> saveTrips(List<TripRec> trips) async {
+    final p = await _prefs;
+    await p.setString(_kTrips,
+        jsonEncode(trips.map((t) => t.toJson()).toList()));
+  }
+
+  // ---- 加油记录 ----
+  Future<List<FuelRec>> loadFuelRecords() async {
+    final raw = (await _prefs).getString(_kFuel);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => FuelRec.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveFuelRecords(List<FuelRec> recs) async {
+    final p = await _prefs;
+    await p.setString(_kFuel,
+        jsonEncode(recs.map((r) => r.toJson()).toList()));
+  }
+
+  // ---- 多车车库 ----
+  Future<List<GarageVehicle>> loadGarage() async {
+    final raw = (await _prefs).getString(_kGarage);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => GarageVehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveGarage(List<GarageVehicle> vehicles) async =>
+      (await _prefs).setString(
+          _kGarage, jsonEncode(vehicles.map((v) => v.toJson()).toList()));
+
+  Future<String?> getActiveVehicleId() async =>
+      (await _prefs).getString(_kActiveVehicle);
+
+  Future<void> setActiveVehicleId(String id) async =>
+      (await _prefs).setString(_kActiveVehicle, id);
+
+  /// 保证车库至少有一辆车：老用户从当前车型档案 + 上次 VIN 迁移一辆。
+  Future<List<GarageVehicle>> ensureGarage() async {
+    var list = await loadGarage();
+    if (list.isEmpty) {
+      final profile = await getProfile() ?? 'mazda6_2011';
+      final vin = await getLastVin() ?? '';
+      final v = GarageVehicle(
+        id: GarageVehicle.newId(),
+        name: '我的车',
+        profileId: profile,
+        vin: vin,
+        createdTs: DateTime.now().millisecondsSinceEpoch,
+      );
+      list = [v];
+      await saveGarage(list);
+      await setActiveVehicleId(v.id);
+      return list;
+    }
+    final active = await getActiveVehicleId();
+    if (active == null || !list.any((e) => e.id == active)) {
+      await setActiveVehicleId(list.first.id);
+    }
+    return list;
+  }
+
+  /// 当前车辆；车库为空时返回 null。
+  Future<GarageVehicle?> getActiveVehicle() async {
+    final list = await ensureGarage();
+    final id = await getActiveVehicleId();
+    for (final v in list) {
+      if (v.id == id) return v;
+    }
+    return list.isEmpty ? null : list.first;
   }
 
   // ---- 设置 ----
@@ -515,9 +613,11 @@ class MaintState {
     this.lastOilOdoKm,
     this.lastTireOdoKm,
     this.lastInspectTs,
+    this.lastInsuranceTs,
     this.intervalOilKm = 8000,
     this.intervalTireKm = 40000,
     this.intervalInspectDays = 365,
+    this.intervalInsuranceDays = 365,
   });
 
   final double accumKm;
@@ -526,9 +626,11 @@ class MaintState {
   final double? lastOilOdoKm;
   final double? lastTireOdoKm;
   final int? lastInspectTs;
+  final int? lastInsuranceTs;
   final int intervalOilKm;
   final int intervalTireKm;
   final int intervalInspectDays;
+  final int intervalInsuranceDays;
 
   /// 当前估算总里程（未填过锚点时为 null）。
   double? get currentOdoKm => odoAnchorKm == null
@@ -553,15 +655,35 @@ class MaintState {
           .difference(DateTime.fromMillisecondsSinceEpoch(lastInspectTs!))
           .inDays;
 
+  int? get sinceInsuranceDays => lastInsuranceTs == null
+      ? null
+      : DateTime.now()
+          .difference(DateTime.fromMillisecondsSinceEpoch(lastInsuranceTs!))
+          .inDays;
+
+  /// 保险到期日（未记录时为 null）。
+  DateTime? get insuranceDue => lastInsuranceTs == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(lastInsuranceTs!)
+          .add(Duration(days: intervalInsuranceDays));
+
+  /// 年检到期日（未记录时为 null）。
+  DateTime? get inspectDue => lastInspectTs == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(lastInspectTs!)
+          .add(Duration(days: intervalInspectDays));
+
   Map<String, dynamic> toJson() => {
         'anchor': odoAnchorKm,
         'anchorAccum': odoAnchorAccumKm,
         'oilOdo': lastOilOdoKm,
         'tireOdo': lastTireOdoKm,
         'inspectTs': lastInspectTs,
+        'insTs': lastInsuranceTs,
         'iOil': intervalOilKm,
         'iTire': intervalTireKm,
         'iDays': intervalInspectDays,
+        'iIns': intervalInsuranceDays,
       };
 
   factory MaintState.fromJson(Map<String, dynamic> j, double accum) => MaintState(
@@ -571,9 +693,11 @@ class MaintState {
         lastOilOdoKm: (j['oilOdo'] as num?)?.toDouble(),
         lastTireOdoKm: (j['tireOdo'] as num?)?.toDouble(),
         lastInspectTs: (j['inspectTs'] as num?)?.toInt(),
+        lastInsuranceTs: (j['insTs'] as num?)?.toInt(),
         intervalOilKm: (j['iOil'] as num?)?.toInt() ?? 8000,
         intervalTireKm: (j['iTire'] as num?)?.toInt() ?? 40000,
         intervalInspectDays: (j['iDays'] as num?)?.toInt() ?? 365,
+        intervalInsuranceDays: (j['iIns'] as num?)?.toInt() ?? 365,
       );
 
   MaintState copyWith({
@@ -582,9 +706,11 @@ class MaintState {
     double? lastOilOdoKm,
     double? lastTireOdoKm,
     int? lastInspectTs,
+    int? lastInsuranceTs,
     int? intervalOilKm,
     int? intervalTireKm,
     int? intervalInspectDays,
+    int? intervalInsuranceDays,
   }) =>
       MaintState(
         accumKm: accumKm,
@@ -593,8 +719,11 @@ class MaintState {
         lastOilOdoKm: lastOilOdoKm ?? this.lastOilOdoKm,
         lastTireOdoKm: lastTireOdoKm ?? this.lastTireOdoKm,
         lastInspectTs: lastInspectTs ?? this.lastInspectTs,
+        lastInsuranceTs: lastInsuranceTs ?? this.lastInsuranceTs,
         intervalOilKm: intervalOilKm ?? this.intervalOilKm,
         intervalTireKm: intervalTireKm ?? this.intervalTireKm,
         intervalInspectDays: intervalInspectDays ?? this.intervalInspectDays,
+        intervalInsuranceDays:
+            intervalInsuranceDays ?? this.intervalInsuranceDays,
       );
 }

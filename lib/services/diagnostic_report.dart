@@ -13,6 +13,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:obd_dashboard/core/diagnostic/dtc_advice.dart';
 import 'package:obd_dashboard/core/diagnostic/dtc_database.dart';
 import 'package:obd_dashboard/core/obd/deep_diagnostic.dart';
 
@@ -465,6 +466,14 @@ class _PagePainter {
     final title = info?.title ?? '未收录的故障码（按 SAE J2012 分类规则）';
     final desc = info?.desc ?? '暂无本地释义，建议用诊断仪读取厂商说明。';
     final fix = info?.suggestion;
+    final advice = DtcAdvice.of(code);
+    final adviceColor = switch (advice.severity) {
+      2 => const Color(0xFFB91C1C),
+      1 => _warn,
+      _ => _ok,
+    };
+    final advice1 = '严重度：${advice.severityLabel}　参考费用：${advice.cost}';
+    final advice2 = '能否继续开：${advice.canDrive}';
     const indent = 10.0;
     final tp1 = TextPainter(
       text: TextSpan(
@@ -487,7 +496,27 @@ class _PagePainter {
                     fontSize: 9, color: Color(0xFF3B4A56), height: 1.4)),
             textDirection: TextDirection.ltr,
           )..layout(maxWidth: _contentW - indent));
-    final h = tp1.height + 3 + tp2.height + (tp3 == null ? 0 : 3 + tp3.height);
+    final tp4 = TextPainter(
+      text: TextSpan(
+          text: advice1,
+          style: TextStyle(fontSize: 9, color: adviceColor, height: 1.4)),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: _contentW - indent);
+    final tp5 = TextPainter(
+      text: TextSpan(
+          text: advice2,
+          style: const TextStyle(
+              fontSize: 9, color: Color(0xFF3B4A56), height: 1.4)),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: _contentW - indent);
+    final h = tp1.height +
+        3 +
+        tp2.height +
+        (tp3 == null ? 0 : 3 + tp3.height) +
+        3 +
+        tp4.height +
+        2 +
+        tp5.height;
     ensure(h + 10);
     final c = _canvas!;
     final y0 = _y;
@@ -511,11 +540,21 @@ class _PagePainter {
       _drawText(c, '处理建议：$fix',
           x: _margin + indent, y: y, size: 9,
           color: const Color(0xFF3B4A56), maxWidth: _contentW - indent);
+      y += tp3.height + 3;
     }
+    _drawText(c, advice1,
+        x: _margin + indent, y: y, size: 9, color: adviceColor,
+        maxWidth: _contentW - indent);
+    y += tp4.height + 2;
+    _drawText(c, advice2,
+        x: _margin + indent, y: y, size: 9,
+        color: const Color(0xFF3B4A56), maxWidth: _contentW - indent);
     _y = y0 + h + 10;
     tp1.dispose();
     tp2.dispose();
     tp3?.dispose();
+    tp4.dispose();
+    tp5.dispose();
   }
 
   void monitorGrid(List<ReadinessMonitor> monitors) {

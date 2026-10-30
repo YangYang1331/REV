@@ -589,28 +589,32 @@ class CloudService {
     }
   }
 
-  /// 返回 null 表示已是最新；否则返回 {versionCode,versionName,notes,apkUrl,...}。
-  /// baseUrl 同时支持 https 域名与 IP:端口。开源版未配服务器时直接不检查。
+  /// 返回 null 表示确已是最新；否则返回 {versionCode,versionName,notes,apkUrl,...}。
+  /// baseUrl 同时支持 https 域名与 IP:端口。
+  ///
+  /// 注意：网络/服务器异常一律抛出，不能返回 null —— 否则界面会把"连不上"
+  /// 误报成"已是最新版本"，用户会卡在旧版本里（v2.16.x 的真实故障）。
   Future<Map<String, dynamic>?> checkUpdate(int currentCode) async {
-    if (_endpoint.trim().isEmpty) return null;
+    if (_endpoint.trim().isEmpty) {
+      throw StateError('未配置更新服务器地址');
+    }
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
     try {
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 6);
       final req = await client.getUrl(Uri.parse('$baseUrl/api/v1/latest'));
-      final resp = await req.close().timeout(const Duration(seconds: 6));
-      if (resp.statusCode != 200) {
-        client.close();
-        return null;
-      }
+      final resp = await req.close().timeout(const Duration(seconds: 8));
       final body = await resp.transform(utf8.decoder).join();
-      client.close();
+      if (resp.statusCode != 200) {
+        throw HttpException('服务器返回 HTTP ${resp.statusCode}', uri: req.uri);
+      }
       final rel = jsonDecode(body) as Map<String, dynamic>;
       final code = (rel['versionCode'] as num?)?.toInt() ?? 0;
+      if (code <= 0) {
+        throw const FormatException('更新信息缺少 versionCode');
+      }
       if (code <= currentCode) return null;
       return rel;
-    } catch (e) {
-      debugPrint('check update failed: $e');
-      return null;
+    } finally {
+      client.close();
     }
   }
 

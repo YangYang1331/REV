@@ -108,12 +108,26 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                 _item(
                   skin,
                   icon: Icons.verified_outlined,
-                  title: '年检 / 保险',
+                  title: '年检',
                   since: s.sinceInspectDays?.toDouble(),
                   limitKm: s.intervalInspectDays.toDouble(),
                   unit: '天',
-                  hint: '每 ${s.intervalInspectDays} 天提醒一次',
+                  hint: s.inspectDue == null
+                      ? '每 ${s.intervalInspectDays} 天提醒一次'
+                      : '到期 ${_ymd(s.inspectDue!)}',
                   onMark: () => _markInspect(s),
+                ),
+                _item(
+                  skin,
+                  icon: Icons.shield_outlined,
+                  title: '保险',
+                  since: s.sinceInsuranceDays?.toDouble(),
+                  limitKm: s.intervalInsuranceDays.toDouble(),
+                  unit: '天',
+                  hint: s.insuranceDue == null
+                      ? '每 ${s.intervalInsuranceDays} 天提醒一次'
+                      : '到期 ${_ymd(s.insuranceDue!)}',
+                  onMark: () => _markInsurance(s),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -230,7 +244,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
           Text(
             since == null
                 ? hint
-                : '已行驶 ${since.toStringAsFixed(0)} $unit · $hint',
+                : '${unit == 'km' ? '已行驶' : '已过去'} ${since.toStringAsFixed(0)} $unit · $hint',
             style: TextStyle(color: skin.faint, fontSize: 11),
           ),
           const SizedBox(height: 6),
@@ -283,6 +297,16 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
   Future<void> _markInspect(MaintState s) async {
     await _save(s.copyWith(
         lastInspectTs: DateTime.now().millisecondsSinceEpoch));
+  }
+
+  Future<void> _markInsurance(MaintState s) async {
+    await _save(s.copyWith(
+        lastInsuranceTs: DateTime.now().millisecondsSinceEpoch));
+  }
+
+  static String _ymd(DateTime d) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
 
   Future<void> _editInterval(MaintState s, {required bool oil}) async {

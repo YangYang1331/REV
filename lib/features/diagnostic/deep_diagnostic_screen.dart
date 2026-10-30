@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:obd_dashboard/core/config/environment.dart';
+import 'package:obd_dashboard/core/diagnostic/dtc_advice.dart';
+import 'package:obd_dashboard/core/diagnostic/dtc_database.dart';
 import 'package:obd_dashboard/core/obd/deep_diagnostic.dart';
 import 'package:obd_dashboard/core/skin/skin_descriptor.dart';
 import 'package:obd_dashboard/core/skin/skin_provider.dart';
 import 'package:obd_dashboard/core/store/app_store.dart';
 import 'package:obd_dashboard/core/vehicle/vehicle_profile.dart';
 import 'package:obd_dashboard/data/obd_providers.dart';
+import 'package:obd_dashboard/features/diagnostic/symptom_check_screen.dart';
 import 'package:obd_dashboard/services/diagnostic_report.dart';
 import 'package:open_filex/open_filex.dart';
 
@@ -128,6 +131,14 @@ class _DeepDiagnosticScreenState extends ConsumerState<DeepDiagnosticScreen> {
         backgroundColor: Colors.transparent,
         title: const Text('深度诊断'),
         actions: [
+          IconButton(
+            tooltip: '症状自查（离线）',
+            icon: const Icon(Icons.psychology_alt_outlined),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SymptomCheckScreen())),
+          ),
           IconButton(
             tooltip: '生成 PDF 诊断报告',
             icon: _exporting
@@ -280,30 +291,168 @@ class _DeepDiagnosticScreenState extends ConsumerState<DeepDiagnosticScreen> {
           if (codes.isEmpty)
             Text('无', style: TextStyle(color: skin.dim, fontSize: 13))
           else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final c in codes)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: skin.accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(c,
-                        style: TextStyle(
-                            color: skin.accent,
-                            fontSize: 13,
-                            fontFamily: 'monospace')),
-                  ),
-              ],
-            ),
+            ...codes.map((c) => _codeAdviceRow(skin, c)),
         ],
       ),
     );
   }
+
+  /// 故障码一行：码 + 中文含义 + 严重度 + 参考费用；点开看能否继续开与自查。
+  Widget _codeAdviceRow(SkinDescriptor skin, String code) {
+    final info = DtcDatabase.explain(code);
+    final a = DtcAdvice.of(code);
+    final color = switch (a.severity) {
+      2 => skin.bad,
+      1 => skin.warn,
+      _ => skin.ok,
+    };
+    return InkWell(
+      borderRadius: BorderRadius.circular(9),
+      onTap: () => _showAdvice(code, a, info.title),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: color.withValues(alpha: 0.22)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(code,
+                    style: TextStyle(
+                        color: skin.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'monospace')),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(info.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: skin.ink, fontSize: 12.5)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(a.severityLabel,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text('参考费用：${a.cost}',
+                style: TextStyle(color: skin.dim, fontSize: 10.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAdvice(String code, DtcAdvice a, String title) {
+    final color = switch (a.severity) {
+      2 => const Color(0xFFFF5C5C),
+      1 => const Color(0xFFFFB020),
+      _ => const Color(0xFF41E39B),
+    };
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF0B0F14),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(code,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'monospace')),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(a.severityLabel,
+                  style: TextStyle(
+                      color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              _sheetLine(Icons.directions_car, a.canDrive),
+              const SizedBox(height: 8),
+              _sheetLine(Icons.payments_outlined, '参考费用：${a.cost}'),
+              if (a.tip != null) ...[
+                const SizedBox(height: 8),
+                _sheetLine(Icons.tips_and_updates_outlined, a.tip!),
+              ],
+              const SizedBox(height: 14),
+              const Text('可以先自己查',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              ...a.selfCheck.asMap().entries.map((e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${e.key + 1}. ',
+                            style: TextStyle(color: color, fontSize: 12.5)),
+                        Expanded(
+                          child: Text(e.value,
+                              style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 12.5,
+                                  height: 1.5)),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetLine(IconData icon, String text) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: Colors.white38),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 12.5, height: 1.5)),
+          ),
+        ],
+      );
 
   Widget _freezeCard(SkinDescriptor skin) {
     final f = _freeze;

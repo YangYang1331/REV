@@ -1,0 +1,2 @@
+# 私有仓库：允许提交签名密钥（upload_signing_key.sh 会用 git add -f 强制加入）
+# 这里不忽略任何文件，确保 signing 目录被跟踪。

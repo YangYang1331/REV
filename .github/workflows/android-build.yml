@@ -20,6 +20,23 @@ jobs:
         with:
           channel: stable
           cache: true
+      # 冷机重跑一次要 40 分钟以上，主要卡在 Gradle 下载与插件编译；
+      # 缓存 ~/.gradle 后第二轮能省掉大半时间。
+      - name: 缓存 Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      # 仓库里的 gradle.properties 是给低内存发版机用的 -Xmx1536m；
+      # GitHub runner 内存更大，lintVital 在 1536m 下会 OutOfMemoryError。
+      - name: CI 放宽 Gradle 堆
+        run: |
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:MaxDirectMemorySize=512m/' android/gradle.properties
+          grep '^org.gradle.jvmargs' android/gradle.properties
       - name: 依赖
         run: flutter pub get
       - name: 构建 release（无 key.properties 时自动回退 debug 签名，仅验证可编译）

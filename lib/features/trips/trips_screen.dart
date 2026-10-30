@@ -87,7 +87,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _currentCard(d, skin),
+          _currentCard(d, t, skin),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -117,7 +117,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
     );
   }
 
-  Widget _currentCard(d, skin) {
+  Widget _currentCard(d, t, skin) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -139,8 +139,19 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('用时 ${_fmtDuration(d.tripSec)}',
-              style: TextStyle(color: skin.dim, fontSize: 12)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('用时 ${_fmtDuration(d.tripSec)}',
+                  style: TextStyle(color: skin.dim, fontSize: 12)),
+              const SizedBox(width: 10),
+              Text('·', style: TextStyle(color: skin.faint, fontSize: 12)),
+              const SizedBox(width: 10),
+              Text(
+                  '评分 ${t.liveTripScore?.toString() ?? '--'} · 最高 ${t.tripMaxSpeed.toStringAsFixed(0)} km/h',
+                  style: TextStyle(color: skin.dim, fontSize: 12)),
+            ],
+          ),
         ],
       ),
     );
@@ -207,6 +218,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
                 const SizedBox(height: 2),
                 Text(r.l100 == null ? '油耗 --' : '${r.l100!.toStringAsFixed(1)} L/100',
                     style: const TextStyle(color: Color(0xFFF2B23B), fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(
+                    r.score == null ? '评分 --' : '评分 ${r.score} · ${r.scoreLabel}',
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
               ],
             ),
             const SizedBox(width: 8),

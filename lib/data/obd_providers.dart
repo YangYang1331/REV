@@ -64,11 +64,22 @@ final cloudServiceProvider = Provider<CloudService>((ref) {
       }
     });
     ref.onDispose(t.cancel);
+
+    // 断网补传：网络恢复后不一定马上有"成功上报"触发补传（正在断网时就是
+    // 一直失败），所以单独起一个低频补传定时器，队列空时是纯内存判断，开销极小。
+    final f = Timer.periodic(const Duration(seconds: 60), (_) async {
+      if (!auth.isLoggedIn) return;
+      if (await cloud.pendingCount() == 0) return;
+      await cloud.flushQueue(token: auth.token);
+    });
+    ref.onDispose(f.cancel);
   });
   ref.onDispose(cloud.dispose);
-  // 登录成功后立即申请定位（有定位权限时），比等到第一帧上报再弹权限框更自然。
+  // 登录成功后：按授权开定位，并立刻补传断网期间攒下的帧。
   void onAuthChanged() {
-    if (auth.isLoggedIn) cloud.startGps();
+    if (!auth.isLoggedIn) return;
+    cloud.startGps();
+    cloud.flushQueue(token: auth.token);
   }
   auth.addListener(onAuthChanged);
   ref.onDispose(() => auth.removeListener(onAuthChanged));

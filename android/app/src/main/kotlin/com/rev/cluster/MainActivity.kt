@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -21,9 +22,12 @@ class MainActivity : FlutterActivity() {
     private val foregroundChannelName = "rev/foreground"
     private val deviceChannelName = "rev/device"
     private val audioFocusChannelName = "rev/audio_focus"
+    private val ttsChannelName = "rev/tts"
 
     private var audioFocus: AudioFocusManager? = null
     private var audioFocusSink: EventChannel.EventSink? = null
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +72,25 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // ── 语音播报（Android 原生 TTS，不引第三方依赖）──
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ttsChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "speak" -> {
+                        val args = call.arguments as? Map<*, *>
+                        val text = (args?.get("text") as? String) ?: ""
+                        result.success(speak(text))
+                    }
+                    "stop" -> {
+                        try { tts?.stop() } catch (_: Exception) {}
+                        result.success(true)
+                    }
+                    "isAvailable" -> result.success(ttsReady)
+                    else -> result.notImplemented()
+                }
+            }
+        initTts()
 
         // ── 新增：音频焦点事件流 ──
         audioFocus = AudioFocusManager(this)
@@ -144,8 +167,49 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** 初始化系统 TTS；失败就静默降级（App 不依赖语音可用性）。 */
+    private fun initTts() {
+        try {
+            tts = TextToSpeech(this) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    try {
+                        tts?.language = java.util.Locale.SIMPLIFIED_CHINESE
+                        // 告警要压过声浪但别炸耳：走 ALARM 用途 + 0.9 音量。
+                        tts?.setAudioAttributes(
+                            android.media.AudioAttributes.Builder()
+                                .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build())
+                        tts?.setSpeechRate(1.05f)
+                        ttsReady = true
+                    } catch (e: Exception) {
+                        Log.w(TAG, "TTS 配置失败: ${e.message}")
+                    }
+                } else {
+                    Log.w(TAG, "TTS 不可用: $status")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS 初始化异常: ${e.message}")
+        }
+    }
+
+    private fun speak(text: String): Boolean {
+        if (text.isBlank()) return false
+        val engine = tts ?: return false
+        if (!ttsReady) return false
+        return try {
+            engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rev-alarm")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS 播报失败: ${e.message}")
+            false
+        }
+    }
+
     override fun onDestroy() {
         audioFocus?.abandon()
+        try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         super.onDestroy()
     }
 

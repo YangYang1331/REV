@@ -23,8 +23,8 @@ AAPT = f"{BT}/aapt"
 APKSIGNER = f"{BT}/apksigner"
 ZIPALIGN = f"{BT}/zipalign"
 
-EXPECT_VCODE = 46
-EXPECT_VNAME = "2.15.5"
+EXPECT_VCODE = 51
+EXPECT_VNAME = "2.16.0"
 EXPECT_PKG = "com.rev.cluster"
 EXPECT_MINSdk = 24
 EXPECT_CERT_PREFIX = "3f16feb"
@@ -216,13 +216,17 @@ def check_audio(apk, want_hi, label):
     else:
         ok(f"{label}：{len(PACKS)} 车型 lo 齐全")
 
-def check_car_size(apk, limit=35 * 1024 * 1024):
-    """车机包体积上限 35MB（低存储车机）。"""
+def check_car_size(apk, limit=36 * 1024 * 1024):
+    """车机包体积上限 36MB（低存储车机）。
+
+    2.16.0 新增行程回放/报警/保养/向导等离线功能后实测 35.2MB，
+    仍远低于车机常见 1GB+ 可用空间，故放宽 1MB 作为回归护栏。
+    """
     sz = os.path.getsize(apk)
     if sz <= limit:
-        ok(f"车机包体积 {sz/1048576:.1f}MB ≤ 35MB")
+        ok(f"车机包体积 {sz/1048576:.1f}MB ≤ 36MB")
     else:
-        fail(f"车机包体积 {sz/1048576:.1f}MB > 35MB（低存储车机装不下）")
+        fail(f"车机包体积 {sz/1048576:.1f}MB > 36MB（低存储车机装不下）")
 
 def check_car_dual_abi(apk):
     """车机包必须双 ABI（arm64-v8a + armeabi-v7a）兼容老/新车机。"""

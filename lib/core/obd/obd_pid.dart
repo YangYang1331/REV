@@ -3,6 +3,7 @@ enum Pid {
   rpm(0x0C, 2, Pid.kindRpm),
   speed(0x0D, 1, Pid.kindSpeed),
   coolant(0x05, 1, Pid.kindTemp),
+  oilTemp(0x5C, 1, Pid.kindTemp),
   intakeTemp(0x0F, 1, Pid.kindTemp),
   ambient(0x46, 1, Pid.kindTemp),
   map(0x0B, 1, Pid.kindRaw),

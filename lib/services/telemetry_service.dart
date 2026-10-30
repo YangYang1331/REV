@@ -9,8 +9,10 @@ import 'package:obd_dashboard/core/vehicle/fuel_calc.dart';
 import 'package:obd_dashboard/core/vehicle/gps_virtual_drivetrain.dart';
 import 'package:obd_dashboard/core/vehicle/vehicle_profile.dart';
 import 'package:obd_dashboard/models/obd_data.dart';
+import 'package:obd_dashboard/services/alarm_service.dart';
 import 'package:obd_dashboard/services/demo_engine.dart';
 import 'package:obd_dashboard/services/engine_sound_service.dart';
+import 'package:obd_dashboard/services/gps_fix.dart';
 import 'package:obd_dashboard/services/gps_speed_service.dart';
 
 /// 统一遥测服务：无论演示 / 真实 / 游戏，UI 只订阅这一份。
@@ -31,6 +33,10 @@ class TelemetryService extends ChangeNotifier {
       best400: AppStore.instance.best400,
       bestBrake: AppStore.instance.bestBrake,
     );
+    // 超速判定阈值（0 = 不判定）；实验室页修改后由 UI 直接赋值，这里只做启动恢复。
+    AppStore.instance.getSpeedLimitKmh().then((v) {
+      speedLimitKmh = v;
+    }).catchError((_) {});
   }
 
   late DemoEngine _demo;
@@ -103,9 +109,47 @@ class TelemetryService extends ChangeNotifier {
   double get tripFuel => _tripFuel;
   double get tripSec => _tripSec;
 
+  // 行程质量统计（驾驶评分 / 轨迹用）
+  double _tripMaxSpeed = 0;
+  int _tripHarshA = 0, _tripHarshB = 0;
+  double _tripIdleSec = 0;
+  int _tripViolations = 0;
+  double _prevSpeed = 0;
+  bool _overLimit = false;
+  int _lastHarshMs = 0;
+  int _lastTrackMs = 0;
+  final List<List<double>> _tripTrack = [];
+
+  /// 超速判定阈值（km/h），0 = 不判定。由设置/实验室页写入。
+  int speedLimitKmh = 0;
+
+  double get tripMaxSpeed => _tripMaxSpeed;
+  int get tripHarshAccel => _tripHarshA;
+  int get tripHarshBrake => _tripHarshB;
+  double get tripIdleSec => _tripIdleSec;
+  int get tripViolations => _tripViolations;
+  List<List<double>> get tripTrack => List.unmodifiable(_tripTrack);
+
+  /// 当前段"实时评分"，让仪表盘/行程页在行驶中也能给出反馈。
+  int? get liveTripScore => TripRec(
+        ts: 0,
+        km: _tripKm,
+        fuel: _tripFuel,
+        sec: _tripSec,
+        harshAccel: _tripHarshA,
+        harshBrake: _tripHarshB,
+        idleSec: _tripIdleSec,
+        violations: _tripViolations,
+      ).score;
+
   // 数据丢失
   int _lastFrameMs = 0;
   bool _dataLost = false;
+
+  // 档位反推去抖（OBD 实车）
+  int _gearOut = 0;
+  int _gearCandidate = 0;
+  int _gearBounce = 0;
 
   ObdData _current = ObdData.empty;
   ObdData get current => _current;
@@ -218,8 +262,14 @@ class TelemetryService extends ChangeNotifier {
 
   void setProfile(VehicleProfile p) {
     _profile = p;
+    // 齿比变了，旧档位立刻失效（否则迟滞会锁在错误档上）。
+    _gearOut = 0;
+    _gearCandidate = 0;
+    _gearBounce = 0;
     _gpsDrivetrain = GpsVirtualDrivetrain(p);
     _coast = CoastStateMachine(idleRpm: p.idleRpm.toDouble());
+    // 红区阈值跟随车型档案，报警服务与仪表盘红屏共用同一数字。
+    AlarmService.instance.redlineRpm = p.redlineRpm;
     // 切车型若发生在受控性能测试中，先解除武装，避免新 DemoEngine
     // 丢失完成回调而卡在 running。
     _perfDemoActive = false;
@@ -406,7 +456,20 @@ class TelemetryService extends ChangeNotifier {
     // 按车型齿比反推好虚拟档位，这里不再覆盖。
     var gear = d.gear;
     if (d.source == 'obd') {
-      gear = _profile.estimateGear(d.rpm.toDouble(), d.speed);
+      final rawGear = _profile.estimateGear(
+        d.rpm.toDouble(),
+        d.speed,
+        prevGear: _gearOut > 0 ? _gearOut : null,
+      );
+      // 换挡去抖：空挡/静止立即生效，挂挡需连续 2 帧一致（换挡本体 >300ms）。
+      if (rawGear == _gearCandidate) {
+        _gearBounce++;
+      } else {
+        _gearCandidate = rawGear;
+        _gearBounce = 0;
+      }
+      if (rawGear == 0 || _gearBounce >= 1) _gearOut = rawGear;
+      gear = _gearOut;
     }
     // 蓝牙手柄手动覆盖优先（仅 gps/game 模拟源；真实 OBD 以 ECU 为准）。
     if (_manualGear != null && (d.source == 'gps' || d.source == 'game')) {
@@ -428,6 +491,7 @@ class TelemetryService extends ChangeNotifier {
       _tripKm += d.speed / 3600.0 * dt;
       final lph = maf == null ? null : maf * 0.3401;
       if (lph != null) _tripFuel += lph / 3600.0 * dt;
+      _accumulateTripQuality(d.speed, d.rpm.toDouble(), dt, now);
     }
     _lastTs = ts;
 
@@ -457,6 +521,10 @@ class TelemetryService extends ChangeNotifier {
 
     _current = enriched;
     _lastFrameMs = now;
+    // 报警判定放在数据落定之后：阈值/语音/记录都在 AlarmService 里统一管。
+    try {
+      AlarmService.instance.feed(enriched);
+    } catch (_) {}
     notifyListeners();
 
     // coast 状态机：按 (车速, 转速) 语义区分 红灯停车 / 真熄火 / 熄火后重开新段。
@@ -480,6 +548,67 @@ class TelemetryService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// 行程质量统计：最高速 / 急加速 / 急刹 / 怠速 / 超速 / GPS 轨迹采样。
+  ///
+  /// 驾驶评分的口径都在这里：急加速 = 纵向加速度 > 2.5 m/s²（约 0.25g），
+  /// 急刹 = 减速 < -3.5 m/s²；两者都有 3 秒冷却，避免一次操作被连续计数。
+  void _accumulateTripQuality(
+      double speed, double rpm, double dt, int now) {
+    if (speed > _tripMaxSpeed) _tripMaxSpeed = speed;
+
+    // 急加速 / 急刹（按车速差分估算纵向加速度，不需要额外的 IMU 依赖）
+    final dv = speed - _prevSpeed;
+    final accel = dv / 3.6 / dt; // m/s²
+    if (now - _lastHarshMs > 3000) {
+      if (accel > 2.5) {
+        _tripHarshA++;
+        _lastHarshMs = now;
+      } else if (accel < -3.5) {
+        _tripHarshB++;
+        _lastHarshMs = now;
+      }
+    }
+    _prevSpeed = speed;
+
+    // 怠速：几乎不动但发动机仍在转
+    if (speed < 3 && rpm > 400) _tripIdleSec += dt;
+
+    // 超速：连续超限按"每次进入超速区间记一次"（离开限速以下 3s 后才允许再次计数）
+    if (speedLimitKmh > 0) {
+      if (speed > speedLimitKmh + 2) {
+        if (!_overLimit) {
+          _overLimit = true;
+          _tripViolations++;
+        }
+      } else if (speed < speedLimitKmh - 3) {
+        _overLimit = false;
+      }
+    }
+
+    // 轨迹采样：5 秒一个点，最多 300 点（≈25 分钟；超出后按 2 倍稀释，
+    // 保证长途也能画出整段形状而不是只剩开头一小截）。
+    if (now - _lastTrackMs >= 5000) {
+      final fix = GpsFixBus.last;
+      if (fix != null && (fix.lat.abs() > 0.0001 || fix.lng.abs() > 0.0001)) {
+        _lastTrackMs = now;
+        if (_tripTrack.length >= 300) {
+          final thinned = <List<double>>[];
+          for (var i = 0; i < _tripTrack.length; i += 2) {
+            thinned.add(_tripTrack[i]);
+          }
+          _tripTrack
+            ..clear()
+            ..addAll(thinned);
+        }
+        _tripTrack.add([
+          double.parse(fix.lat.toStringAsFixed(5)),
+          double.parse(fix.lng.toStringAsFixed(5)),
+          double.parse(fix.speedKmh.toStringAsFixed(1)),
+        ]);
+      }
+    }
+  }
+
   /// 处理 coast 状态机产出的动作。
   void _handleCoastEvent(CoastEvent e) {
     switch (e) {
@@ -492,6 +621,7 @@ class TelemetryService extends ChangeNotifier {
         // 旧段已在 endTrip 落盘）。
         _tripKm = _tripFuel = _tripSec = 0;
         _lastTs = -1;
+        _resetTripQuality();
         notifyListeners();
         break;
       case CoastEvent.none:
@@ -524,18 +654,37 @@ class TelemetryService extends ChangeNotifier {
   // ---- 行程 ----
   Future<TripRec> resetTrip() async {
     final rec = TripRec(
-      ts: DateTime.now().millisecondsSinceEpoch,
+      ts: DateTime.now().millisecondsSinceEpoch - (_tripSec * 1000).round(),
       km: _tripKm,
       fuel: _tripFuel,
       sec: _tripSec,
+      maxSpeed: _tripMaxSpeed,
+      harshAccel: _tripHarshA,
+      harshBrake: _tripHarshB,
+      idleSec: _tripIdleSec,
+      violations: _tripViolations,
+      track: List<List<double>>.from(_tripTrack),
     );
     if (rec.km > 0.01 || rec.sec >= 10) {
       await AppStore.instance.addTrip(rec);
     }
     _tripKm = _tripFuel = _tripSec = 0;
     _lastTs = -1;
+    _resetTripQuality();
     notifyListeners();
     return rec;
+  }
+
+  void _resetTripQuality() {
+    _tripMaxSpeed = 0;
+    _tripHarshA = _tripHarshB = 0;
+    _tripIdleSec = 0;
+    _tripViolations = 0;
+    _prevSpeed = 0;
+    _lastHarshMs = 0;
+    _lastTrackMs = 0;
+    _overLimit = false;
+    _tripTrack.clear();
   }
 
   // ---- 性能 ----

@@ -11,6 +11,7 @@ import 'package:obd_dashboard/features/connection/preheat_screen.dart';
 import 'package:obd_dashboard/features/connection/scan_logic.dart';
 import 'package:obd_dashboard/features/connection/self_check_screen.dart';
 import 'package:obd_dashboard/features/dashboard/widgets/data_mode_selector.dart';
+import 'package:obd_dashboard/services/auto_connect.dart';
 import 'package:obd_dashboard/services/ble_uart_channel.dart';
 import 'package:obd_dashboard/services/usb_uart_channel.dart';
 import 'package:obd_dashboard/services/wifi_obd_channel.dart';
@@ -149,6 +150,7 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
     }
     if (!mounted) return;
     if (ok) {
+      AutoConnect.userOptOut = false;
       setState(() => _status = 'WiFi OBD 已连接，数据通道已启动');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('WiFi OBD 已连接，返回仪表盘查看实时数据')),
@@ -256,6 +258,7 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
     }
     if (!mounted) return;
     if (ok) {
+      AutoConnect.userOptOut = false;
       setState(() {
         _connectingId = null;
         _autoConnecting = false;
@@ -296,6 +299,7 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
     }
     if (!mounted) return;
     if (ok) {
+      AutoConnect.userOptOut = false;
       setState(() {
         _usbConnectingId = null;
         _status = 'USB 已连接，数据通道已启动';
@@ -470,6 +474,7 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
                 trailing: TextButton(
                   // 主动断开：基座已回调 tele.onObdDisconnected，模式保持 real 不回退演示
                   onPressed: () async {
+                    AutoConnect.userOptOut = true;
                     try {
                       await obd.disconnect();
                     } catch (_) {}

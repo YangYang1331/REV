@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -9,9 +11,15 @@ import 'package:obd_dashboard/core/vehicle/vehicle_profile.dart';
 import 'package:obd_dashboard/core/vehicle/engine_pack_mapping.dart';
 import 'package:obd_dashboard/data/obd_providers.dart';
 import 'package:obd_dashboard/features/auth/auth_screen.dart';
+import 'package:obd_dashboard/features/alarm/alarm_settings_screen.dart';
+import 'package:obd_dashboard/features/cloud/history_screen.dart';
+import 'package:obd_dashboard/features/connection/connect_wizard.dart';
 import 'package:obd_dashboard/features/lab/lab_screen.dart';
+import 'package:obd_dashboard/features/maintenance/maintenance_screen.dart';
+import 'package:obd_dashboard/features/privacy/privacy_screen.dart';
 import 'package:obd_dashboard/features/settings/engine_pack_screen.dart';
 import 'package:obd_dashboard/features/settings/speed_calibration_screen.dart';
+import 'package:obd_dashboard/services/cloud_service.dart';
 import 'package:obd_dashboard/services/crash_guard.dart';
 import 'package:obd_dashboard/services/screen_awake.dart';
 import 'package:obd_dashboard/services/engine_sound_service.dart';
@@ -26,6 +34,57 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final ScreenAwake _awake = ScreenAwake();
+
+  /// 最近一次成功读取的 VIN（仅本地展示，用于判断是否已自动匹配过）。
+  String? _vin;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadVin());
+  }
+
+  Future<void> _loadVin() async {
+    try {
+      final v = await AppStore.instance.getLastVin();
+      if (mounted && v != null && v.isNotEmpty) setState(() => _vin = v);
+    } catch (_) {}
+  }
+
+  /// 从车辆读取 Mode 09 02 车架号，按 VIN 匹配内置车型（识别不出就保持手选）。
+  Future<void> _readVin() async {
+    final obd = ref.read(obdServiceProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    if (!obd.isConnected) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('请先在连接页连上 OBD 适配器，并保持车辆点火（ON 档）')));
+      return;
+    }
+    messenger.showSnackBar(const SnackBar(
+        content: Text('正在读取车架号（约 3–8 秒）…'),
+        duration: Duration(seconds: 2)));
+    final info = await obd.readVin();
+    if (!mounted) return;
+    if (info == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('读取失败：车辆不支持 Mode 09 02，或未点火 / 适配器断连')));
+      return;
+    }
+    await AppStore.instance.setLastVin(info.vin);
+    final pid = info.matchProfileId();
+    if (pid != null) {
+      ref.read(telemetryProvider).setProfile(VehicleProfile.byId(pid));
+      final name = VehicleProfile.byId(pid).name;
+      messenger.showSnackBar(SnackBar(
+          content: Text('已识别 ${info.summary} → $name'),
+          duration: const Duration(seconds: 4)));
+    } else {
+      messenger.showSnackBar(SnackBar(
+          content: Text('读到 ${info.summary}，暂无法自动匹配车型，请手动选择'),
+          duration: const Duration(seconds: 4)));
+    }
+    setState(() => _vin = info.vin);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +145,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: const TextStyle(
                   color: Colors.white38, fontSize: 12, height: 1.5),
             ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.qr_code_scanner, color: Color(0xFF27D6E6)),
+            title:
+                const Text('VIN 自动识别车型', style: TextStyle(color: Colors.white)),
+            subtitle: Text(
+              _vin == null
+                  ? '连上适配器后一键读取车架号，按 VIN 自动选好车型档案'
+                  : '上次读取：$_vin（识别不准可手动改上方下拉）',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+            trailing: const Icon(Icons.play_circle_outline,
+                color: Color(0xFF27D6E6), size: 22),
+            onTap: _readVin,
+          ),
+          _header('连接与提醒'),
+          ListTile(
+            leading:
+                const Icon(Icons.route_outlined, color: Color(0xFF27D6E6)),
+            title: const Text('首次连接向导', style: TextStyle(color: Colors.white)),
+            subtitle: const Text('选方式 → 选设备 → 连接 → 读 VIN 自动匹配车型',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const ConnectWizard())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_active_outlined,
+                color: Color(0xFF27D6E6)),
+            title: const Text('报警与语音', style: TextStyle(color: Colors.white)),
+            subtitle: const Text('水温/油温/电压/超速阈值，语音播报与提示音',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AlarmSettingsScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.build_circle_outlined,
+                color: Color(0xFF27D6E6)),
+            title: const Text('保养提醒', style: TextStyle(color: Colors.white)),
+            subtitle: const Text('机油 / 轮胎 / 年检按里程与日期倒计时',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const MaintenanceScreen())),
+          ),
+          ListTile(
+            leading:
+                const Icon(Icons.show_chart, color: Color(0xFF27D6E6)),
+            title: const Text('云端历史趋势', style: TextStyle(color: Colors.white)),
+            subtitle: const Text('查看服务器记录的水温/油温/电压曲线',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const HistoryScreen())),
           ),
           _header('校准'),
           ListTile(
@@ -189,6 +303,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right, color: Colors.white24),
             onTap: () => _pickAudioQuality(context),
           ),
+          _header('隐私与数据'),
+          Consumer(builder: (context, wref, _) {
+            final cloud = wref.watch(cloudServiceProvider);
+            return ListTile(
+              leading: const Icon(Icons.shield_outlined, color: Color(0xFF27D6E6)),
+              title: const Text('隐私与数据说明',
+                  style: TextStyle(color: Colors.white)),
+              subtitle: Text(
+                '${cloud.cloudUpload ? '上传车辆数据' : '仅本地使用（不上传）'}'
+                ' · ${cloud.gpsUpload ? '包含位置' : '不含位置'}'
+                ' · 可随时查看/修改',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+              onTap: () async {
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const PrivacyScreen(gate: false)));
+                if (mounted) setState(() {});
+              },
+            );
+          }),
           _header('账号 · 车队看板'),
           Consumer(builder: (context, wref, _) {
             final auth = wref.watch(authProvider);
@@ -267,7 +404,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: Text(
                   cloud.needsUserServer
                       ? '未配置：请填写你自己部署的服务器地址（留空则不上报、不检查更新）'
-                      : cloud.endpoint,
+                      : (cloud.endpointHealed
+                          ? '${cloud.endpoint}\n已自动修正地址（原先多写了路径）'
+                          : cloud.endpoint),
                   style: TextStyle(
                       color: cloud.needsUserServer
                           ? Color(0xFFFFB4A8)
@@ -275,6 +414,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       fontSize: 11)),
               trailing: const Icon(Icons.edit, color: Colors.white24, size: 18),
               onTap: () => _editEndpoint(cloud),
+            );
+          }),
+          Consumer(builder: (context, wref, _) {
+            final cloud = wref.watch(cloudServiceProvider);
+            if (!cloud.isPlaintextPublic) return const SizedBox.shrink();
+            return ListTile(
+              leading: const Icon(Icons.gpp_maybe, color: Color(0xFFFF6B3D)),
+              title: const Text('当前使用明文 HTTP 直连 IP',
+                  style: TextStyle(color: Color(0xFFFFB4A8), fontSize: 13)),
+              subtitle: const Text(
+                  '数据在网络上是未加密的。建议给服务器配置域名 + HTTPS 证书后改用域名地址。',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
+              dense: true,
             );
           }),
           Consumer(builder: (context, wref, _) {
@@ -377,7 +529,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title:
                 const Text('REV 车机仪表盘', style: TextStyle(color: Colors.white)),
             subtitle: const Text(
-                'v2.15.4 · 27 套声浪（转速驱动 + 负荷音色） · 采样音质高/低/自动三档 · OBD 自动协议+WiFi+坏帧过滤 · 故障码清除 · 电影感开屏 · 车队看板 · 高清背景',
+                'v2.16.0 · 行程轨迹回放 / 驾驶评分 · 连接向导 · 报警语音 · 保养提醒 · 故障码维修建议 · 云端趋势 · 更多 PID',
                 style: TextStyle(color: Colors.white38, fontSize: 12)),
           ),
           ListTile(
@@ -490,7 +642,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _editEndpoint(cloud) async {
+  Future<void> _editEndpoint(CloudService cloud) async {
     final ctrl = TextEditingController(text: cloud.endpoint);
     final ok = await showDialog<bool>(
       context: context,
@@ -517,6 +669,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('取消')),
+          TextButton(
+              onPressed: () {
+                ctrl.text = CloudService.defaultEndpoint;
+              },
+              child: const Text('恢复默认')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('保存')),

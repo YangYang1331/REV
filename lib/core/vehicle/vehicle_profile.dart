@@ -52,7 +52,11 @@ class VehicleProfile {
 
   /// 由转速 + 车速反推档位。
   /// 0=空档/静止/离合，1..maxGear=档位，-1=无法判断。
-  int estimateGear(double rpm, double speedKmh) {
+  ///
+  /// [prevGear] 为上一帧档位，用于迟滞：液力变矩器滑移、坡道加减速会让
+  /// K 在相邻两档间抖动，若本档仍在放宽容差内就不跳挡（声浪"闷音"逻辑
+  /// 依赖档位，跳变会听出来）。
+  int estimateGear(double rpm, double speedKmh, {int? prevGear}) {
     if (speedKmh < 3) return 0;
     if (rpm < idleRpm * 0.7) return 0;
     if (gearRatios.isEmpty) {
@@ -62,16 +66,25 @@ class VehicleProfile {
     }
     final k = rpm / speedKmh;
     final kt = gearKTable();
+    double errOf(int i) => (k - kt[i]).abs() / kt[i];
+    // 低速（1 挡）带液力变矩器滑移，K 偏大，容差放宽
+    double tolOf(int i) => i == 0 ? 0.42 : 0.24;
+
     int best = -1;
     double bestErr = double.maxFinite;
     for (var i = 0; i < kt.length; i++) {
-      // 低速带液力变矩器滑移，K 偏大，放宽一档容差
-      final tol = i == 0 ? 0.42 : 0.24;
-      final err = (k - kt[i]).abs() / kt[i];
-      if (err < tol && err < bestErr) {
+      final err = errOf(i);
+      if (err < tolOf(i) && err < bestErr) {
         bestErr = err;
         best = i + 1;
       }
+    }
+    // 迟滞：上一档仍明显成立时保持，避免相邻档来回跳。
+    if (prevGear != null && prevGear >= 1 && prevGear <= kt.length) {
+      final pe = errOf(prevGear - 1);
+      final plausible = pe < tolOf(prevGear - 1) * 1.25;
+      final competitive = best < 0 || pe < bestErr * 2.0 || pe < 0.05;
+      if (plausible && competitive) return prevGear;
     }
     if (best < 0) {
       var bi = 0;
@@ -112,8 +125,18 @@ class VehicleProfile {
     return speedKmh * k;
   }
 
+  /// 马自达 6（2004–2013，含 2011 款"普马"）2.0L 5AT 齿比：
+  /// 3.620 / 1.925 / 1.285 / 0.933 / 0.692，主减 4.147。
+  /// 校核锚点：5 挡 120 km/h ≈ 2800–2900 rpm、140 km/h ≈ 3400 rpm
+  /// （实测 K=24.3，本表 K5=24.1，误差 <1%）。
   static const List<double> _mazda6Ratios = [
-    3.623, 1.953, 1.290, 0.918, 0.749
+    3.620, 1.925, 1.285, 0.933, 0.692
+  ];
+
+  /// 创驰蓝天 6AT（SKYACTIV-Drive）齿比：3.552 / 2.022 / 1.452 / 1.000 /
+  /// 0.708 / 0.599，2.0L 主减速比 4.325。
+  static const List<double> _skyactiv6AtRatios = [
+    3.552, 2.022, 1.452, 1.000, 0.708, 0.599
   ];
 
   static final List<VehicleProfile> presets = [
@@ -132,7 +155,26 @@ class VehicleProfile {
       shiftUpRpm: 3000,
       shiftDownRpm: 1250,
       idleRpm: 800,
-      note: 'ISO15765 CAN 11bit/500k；FS5A-EL 5AT 按真实齿比反推档位',
+      note: 'ISO15765 CAN 11bit/500k；5AT 齿比 3.620/1.925/1.285/0.933/0.692、'
+          '主减 4.147、原厂 205/55R16，档位按 K=转速/车速 反推。',
+    ),
+    VehicleProfile(
+      id: 'mazda6_gj',
+      name: '马自达6 2014+ 2.0L 创驰蓝天（6AT）',
+      protocol: 6,
+      redlineRpm: 6800,
+      maxGear: 6,
+      cylinders: 4,
+      fuel: '汽油',
+      displacementL: 2.0,
+      gearRatios: _skyactiv6AtRatios,
+      finalDrive: 4.325,
+      tireCircumferenceM: 2.13,
+      shiftUpRpm: 3200,
+      shiftDownRpm: 1300,
+      idleRpm: 650,
+      note: 'SKYACTIV-Drive 6AT（2.0L 主减 4.325，225/55R17 胎周 2.13m）；'
+          '若换过大轮毂或胎规格不同，档位会整体偏高/偏低一档。',
     ),
     VehicleProfile(
       id: 'auto',

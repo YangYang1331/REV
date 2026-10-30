@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:obd_dashboard/core/diagnostic/dtc_advice.dart';
 import 'package:obd_dashboard/core/diagnostic/dtc_database.dart';
 import 'package:obd_dashboard/core/skin/skin_provider.dart';
 import 'package:obd_dashboard/data/obd_providers.dart';
 import 'package:obd_dashboard/features/diagnostic/data_stream_screen.dart';
+import 'package:obd_dashboard/services/obd_service.dart';
 
 class DiagnosticScreen extends ConsumerStatefulWidget {
   const DiagnosticScreen({super.key});
@@ -190,7 +192,8 @@ class _DiagnosticScreenState extends ConsumerState<DiagnosticScreen> {
           if (codes.isEmpty)
             _noDtcCard(skin)
           else
-            ...codes.map((c) => _dtcCard(c, skin)),
+            // 严重度优先：能让你马上停车的码排在最前面，提示类码放最后。
+            ..._sortedByRisk(codes).map((c) => _dtcCard(c, skin)),
           const SizedBox(height: 20),
 
           // ── 实时数据流 ──
@@ -239,6 +242,10 @@ class _DiagnosticScreenState extends ConsumerState<DiagnosticScreen> {
             ),
           ),
           ...shown.map((r) => _rowTile(r)),
+          const SizedBox(height: 16),
+
+          // ── 马自达扩展数据 / 手工命令 ──
+          const _Mode22Panel(),
           const SizedBox(height: 12),
           Text(
             '说明：ATF 油温、催化器温度、燃油轨压力、点火提前等无统一标准 PID，多数 ECU 不广播；本车不支持时自动隐藏。',
@@ -386,9 +393,91 @@ class _DiagnosticScreenState extends ConsumerState<DiagnosticScreen> {
                       )),
                   const SizedBox(height: 10),
                   _detailBlock('处理建议', info.suggestion, skin),
+                  const SizedBox(height: 12),
+                  _adviceBlock(code, skin),
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  List<String> _sortedByRisk(List<String> codes) {
+    final l = List<String>.from(codes);
+    l.sort((a, b) {
+      final ra = DtcAdvice.of(a).severity;
+      final rb = DtcAdvice.of(b).severity;
+      if (ra != rb) return rb.compareTo(ra);
+      return a.compareTo(b);
+    });
+    return l;
+  }
+
+  /// 严重度 / 能否继续开 / 维修预算 / 自查三步（P1「维修建议」）。
+  Widget _adviceBlock(String code, skin) {
+    final a = DtcAdvice.of(code);
+    final color = switch (a.severity) {
+      2 => skin.bad,
+      1 => skin.warn,
+      _ => skin.ok,
+    };
+    final rows = <Widget>[
+      _adviceRow(Icons.report_gmailerrorred, '严重度：${a.severityLabel}', color, skin),
+      _adviceRow(Icons.directions_car, a.canDrive, skin.ink, skin),
+      _adviceRow(Icons.payments_outlined, '参考费用：${a.cost}', skin.dim, skin),
+    ];
+    if (a.tip != null) {
+      rows.add(_adviceRow(Icons.tips_and_updates_outlined, a.tip!, skin.accent, skin));
+    }
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...rows,
+          const SizedBox(height: 8),
+          Text('自己能先查的三步',
+              style: TextStyle(
+                  color: skin.dim, fontSize: 12, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          ...a.selfCheck.asMap().entries.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${e.key + 1}. ',
+                        style: TextStyle(color: color, fontSize: 12.5)),
+                    Expanded(
+                      child: Text(e.value,
+                          style: TextStyle(
+                              color: skin.dim, fontSize: 12.5, height: 1.45)),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+  Widget _adviceRow(IconData icon, String text, Color color, skin) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(text,
+                style: TextStyle(color: color, fontSize: 12.5, height: 1.45)),
+          ),
         ],
       ),
     );
@@ -447,4 +536,252 @@ class _Row {
   final String label;
   final String? value;
   final String unit;
+}
+
+/// 马自达扩展数据面板：Mode 22 支持位图探测 + 原始命令台 + 档位 K 值。
+///
+/// FORScan 的马自达 PID 表是逆向私有库，没有公开可信来源，所以不写死地址；
+/// 这里直接向 ECU 询问它支持哪些 0x22 PID，再让用户按需读原始响应。
+class _Mode22Panel extends ConsumerStatefulWidget {
+  const _Mode22Panel();
+
+  @override
+  ConsumerState<_Mode22Panel> createState() => _Mode22PanelState();
+}
+
+class _Mode22PanelState extends ConsumerState<_Mode22Panel> {
+  final TextEditingController _cmd = TextEditingController(text: '0902');
+  bool _busy = false;
+  int _progressBase = -1;
+  String? _probeMsg;
+  Mode22Result? _probe;
+  String? _resp;
+
+  @override
+  void dispose() {
+    _cmd.dispose();
+    super.dispose();
+  }
+
+  Future<void> _probeMode22() async {
+    final obd = ref.read(obdServiceProvider);
+    setState(() {
+      _busy = true;
+      _probe = null;
+      _resp = null;
+      _probeMsg = '正在询问 ECU 支持哪些扩展 PID…';
+    });
+    try {
+      final r = await obd.probeMode22(onProgress: (b) {
+        if (mounted) setState(() => _progressBase = b);
+      });
+      if (!mounted) return;
+      setState(() {
+        _probe = r;
+        _probeMsg = r.summary;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _probeMsg = '探测失败：$e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progressBase = -1;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendRaw() async {
+    final obd = ref.read(obdServiceProvider);
+    setState(() {
+      _busy = true;
+      _resp = null;
+    });
+    try {
+      final r = await obd.sendRaw(_cmd.text);
+      if (mounted) setState(() => _resp = r);
+    } catch (e) {
+      if (mounted) setState(() => _resp = '发送失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final skin = ref.watch(skinProvider);
+    final t = ref.watch(telemetryProvider);
+    final d = t.current;
+    final obd = ref.watch(obdServiceProvider);
+    final kt = t.profile.gearKTable();
+    final k = d.speed >= 3 ? d.rpm / d.speed : null;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: skin.accent.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune, size: 16, color: skin.accent),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('马自达扩展数据（Mode 22）',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5)),
+              ),
+              if (!obd.isConnected)
+                Text('未连接', style: TextStyle(color: skin.faint, fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '马自达专用参数（变速箱油温、转向角、里程等）走 UDS 0x22 服务，'
+            '地址因车而异且未公开。点击探测，ECU 会回报它真正支持的 PID 掩码；'
+            '再用下方命令台按需读取原始响应。',
+            style: TextStyle(color: skin.dim, fontSize: 11.5, height: 1.6),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: (_busy || !obd.isConnected) ? null : _probeMode22,
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('探测扩展 PID'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: skin.accent,
+                  side: BorderSide(color: skin.accent.withValues(alpha: 0.5)),
+                  minimumSize: const Size(0, 34),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+              if (_progressBase >= 0) ...[
+                const SizedBox(width: 10),
+                Text('22 ${_progressBase.toRadixString(16).padLeft(2, '0').toUpperCase()}',
+                    style: TextStyle(color: skin.dim, fontSize: 11)),
+              ],
+            ],
+          ),
+          if (_probeMsg != null) ...[
+            const SizedBox(height: 10),
+            Text(_probeMsg!,
+                style: TextStyle(color: skin.dim, fontSize: 12, height: 1.5)),
+          ],
+          if (_probe != null && !_probe!.isEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _probe!.labels.take(64).map((s) {
+                final pid = s.replaceAll(' ', '');
+                return InkWell(
+                  onTap: () => setState(() => _cmd.text = pid),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: skin.accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(s,
+                        style: TextStyle(
+                            color: skin.accent,
+                            fontSize: 11,
+                            fontFamily: 'monospace')),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 6),
+            Text('点上面任一 PID 可把它填进命令台（去掉空格即为完整请求）。',
+                style: TextStyle(color: skin.faint, fontSize: 10.5)),
+          ],
+          const SizedBox(height: 12),
+
+          // 档位反推实时检视：K = rpm / km/h
+          if (k != null && kt.isNotEmpty) ...[
+            Text(
+              '档位反推 K = 转速/车速 = ${k.toStringAsFixed(1)}  →  '
+              '${d.gear <= 0 ? "N" : "${d.gear} 挡"}',
+              style: TextStyle(
+                  color: skin.ok, fontSize: 11.5, fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '各挡理论 K：${[for (var i = 0; i < kt.length; i++) "${i + 1}挡 ${kt[i].toStringAsFixed(0)}"].join(" · ")}',
+              style: TextStyle(color: skin.faint, fontSize: 10.5, height: 1.5),
+            ),
+            const SizedBox(height: 10),
+          ],
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _cmd,
+                  enabled: !_busy,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontFamily: 'monospace'),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '例：010C / 0902 / 22 F4 0D',
+                    hintStyle: TextStyle(color: skin.faint, fontSize: 12),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.14)),
+                    ),
+                  ),
+                  onSubmitted: (_) => _sendRaw(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: (_busy || !obd.isConnected) ? null : _sendRaw,
+                style: FilledButton.styleFrom(
+                  backgroundColor: skin.accent,
+                  minimumSize: const Size(0, 40),
+                ),
+                child: Text(_busy ? '…' : '发送',
+                    style: const TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          if (_resp != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                _resp!,
+                style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                    height: 1.5),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

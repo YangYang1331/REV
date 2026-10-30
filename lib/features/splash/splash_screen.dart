@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:obd_dashboard/core/store/app_store.dart';
 import 'package:obd_dashboard/features/dashboard/dashboard_screen.dart';
 import 'package:obd_dashboard/features/dashboard/widgets/horizon_fx.dart';
+import 'package:obd_dashboard/features/privacy/privacy_screen.dart';
 import 'package:obd_dashboard/services/sound_service.dart';
 
 /// 开屏导航策略【纯逻辑决策】——不碰任何动画时钟/原生播放器，便于单测：
@@ -206,7 +207,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     } catch (_) {}
   }
 
-  void _goHome() {
+  Future<void> _goHome() async {
     if (_navigated || !mounted) return;
     _navigated = true;
     _absTimer?.cancel();
@@ -214,13 +215,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     try {
       _c.stop();
     } catch (_) {}
+    // 首次启动（或隐私条款版本更新）先过隐私授权页：数据去向/退出方式必须明示并主动同意。
+    var accepted = false;
+    try {
+      accepted = await AppStore.instance.getPrivacyAccepted();
+    } catch (_) {}
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 350),
         pageBuilder: (_, a, __) => FadeTransition(
           opacity: a,
-          child: const DashboardScreen(),
+          child:
+              accepted ? const DashboardScreen() : const PrivacyScreen(gate: true),
         ),
       ),
     );

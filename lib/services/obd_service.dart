@@ -6,6 +6,7 @@ import 'package:obd_dashboard/core/obd/obd_pid.dart';
 import 'package:obd_dashboard/core/obd/obd_protocol.dart';
 import 'package:obd_dashboard/core/obd/pid_sanity.dart';
 import 'package:obd_dashboard/core/store/app_store.dart';
+import 'package:obd_dashboard/core/vehicle/vin.dart';
 import 'package:obd_dashboard/models/obd_data.dart';
 import 'package:obd_dashboard/services/obd_transport.dart';
 import 'package:obd_dashboard/services/sound_service.dart';
@@ -108,6 +109,7 @@ class ObdService {
     Pid.fuelLevel,
     Pid.voltage,
     Pid.intakeTemp,
+    Pid.oilTemp,
     Pid.ltft,
     Pid.ignAdv,
     Pid.ambient,
@@ -239,14 +241,25 @@ class ObdService {
     _scheduleReconnect('连接已断开');
   }
 
-  /// 指数退避重连：1→2→4→8→16→30s 封顶；超过 [maxReconnectAttempts] 放弃。
+  /// 指数退避重连：1→2→4→8→16→30s 封顶。
+  ///
+  /// 达到 [maxReconnectAttempts] 后不再“放弃”，而是转为每 60 秒一次的低频探测：
+  /// 开车途中熄火再启动、适配器断电重插、地库出来恢复信号，这些场景都在
+  /// 退避窗口之外，直接停止重连等于让用户手动跑去连接页（Torque 的老毛病）。
   void _scheduleReconnect(String error) {
     if (!_wantConnected) return;
     _reconnectAttempt++;
     if (_reconnectAttempt > maxReconnectAttempts) {
-      _log('自动重连已达上限 $maxReconnectAttempts 次，停止自动重连');
+      _log('自动重连 $maxReconnectAttempts 次未成功，转为 60s 低频探测');
       _setState(ObdConnStage.disconnected,
-          error: '$error（重连已达上限，请手动重连）');
+          error: '$error（已转低频重试，可到连接页手动重连）',
+          attempt: _reconnectAttempt);
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(const Duration(seconds: 60), () async {
+        if (!_wantConnected) return;
+        _reconnectAttempt = 1; // 重新走一轮快速退避
+        await _doConnect();
+      });
       return;
     }
     final sec = (1 << _reconnectAttempt).clamp(1, 30);
@@ -340,32 +353,174 @@ class ObdService {
   /// 自适应命令超时：以近期 RTT 的 3 倍为基线，夹在 [120, 800]ms。
   int _timeoutMs() => (_rttMs * 3).clamp(120, 800).round();
 
+  /// 全局命令锁：ELM327 一次只能跑一条命令，轮询与 UI 手工命令必须排队，
+  /// 否则手工命令会被轮询线程“抢答”，收到的是上一条 PID 的响应。
+  Future<void> _cmdLock = Future.value();
+
   /// 发送一条命令，等待匹配响应或超时。响应驱动：命中标记立即返回。
   Future<_CmdResult> _sendCmd(String cmd,
       {String? expectMarker, int? timeoutMs}) async {
     final t = _transport;
     if (t == null) return const _CmdResult(text: '', timedOut: true);
-    // 串行化：上一条未完成则等它结束（正常轮询不会并发）。
-    if (_pending != null && !_pending!.isCompleted) {
-      try {
-        await _pending!.future;
-      } catch (_) {}
-    }
-    final completer = Completer<_CmdResult>();
-    _pending = completer;
-    _pendingExpect = expectMarker;
-    _pendingBuf.clear();
-    _sw = Stopwatch()..start();
-    final to = timeoutMs ?? _timeoutMs();
-    _pendingTimer?.cancel();
-    _pendingTimer = Timer(Duration(milliseconds: to),
-        () => _finishPending(timedOut: true));
+    final prev = _cmdLock;
+    final gate = Completer<void>();
+    _cmdLock = gate.future;
     try {
-      await t.writeString(cmd);
-    } catch (_) {
-      _finishPending(timedOut: true);
+      await prev;
+      // 排队期间可能已断开 / 换了传输，直接失败。
+      if (t != _transport) return const _CmdResult(text: '', timedOut: true);
+      final completer = Completer<_CmdResult>();
+      _pending = completer;
+      _pendingExpect = expectMarker;
+      _pendingBuf.clear();
+      _sw = Stopwatch()..start();
+      final to = timeoutMs ?? _timeoutMs();
+      _pendingTimer?.cancel();
+      _pendingTimer = Timer(Duration(milliseconds: to),
+          () => _finishPending(timedOut: true));
+      try {
+        await t.writeString(cmd);
+      } catch (_) {
+        _finishPending(timedOut: true);
+      }
+      return await completer.future;
+    } finally {
+      gate.complete();
     }
-    return completer.future;
+  }
+
+  // ── 原始命令 / 厂商扩展数据（Mode 22） ──
+
+  /// 手工发送一条十六进制命令（如 `010C`、`0902`、`2200`），返回 ECU 原文。
+  /// 供诊断页调试与读取厂商扩展 PID；非十六进制输入直接拒绝。
+  Future<String> sendRaw(String cmd) async {
+    if (!_connected) return '未连接：请先连接 OBD 适配器';
+    final c = cmd.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+    if (c.isEmpty) return '命令为空';
+    if (!RegExp(r'^[0-9A-F]{2,32}$').hasMatch(c)) {
+      return '只接受十六进制命令（例：010C / 0902 / 2200）';
+    }
+    final r = await _sendCmd(c,
+        expectMarker: _responseMarker(c),
+        timeoutMs: c.startsWith('09') ? 3000 : 1200);
+    final text = r.text.trim();
+    if (text.isNotEmpty && text.contains('7F')) return text; // 否定应答原样返回
+    if (r.timedOut && text.isEmpty) return '超时：ECU 无应答（该 PID 可能不支持）';
+    return text.isEmpty ? '空响应' : text;
+  }
+
+  /// 读取车架号（Mode 09 PID 02）。
+  ///
+  /// VIN 是 ISO-TP 多帧响应，`ATCAF0` 下 ELM 只回第一帧（7 字节），拿不全。
+  /// 这里临时打开自动格式化（CAF1）让适配器自行重组，读完立刻恢复 CAF0，
+  /// 否则后续轮询的紧凑帧解析会全部错位。失败（老车不支持 0902）返回 null。
+  Future<VinInfo?> readVin() async {
+    if (!_connected) return null;
+    try {
+      await _sendCmd('ATCAF1', expectMarker: 'OK', timeoutMs: 800);
+      await _sendCmd('ATH0', expectMarker: 'OK', timeoutMs: 600);
+      var best = await _sendCmd('0902', expectMarker: '49', timeoutMs: 3000);
+      var info = VinInfo.parse(best.text);
+      if (info == null) {
+        // 有的适配器 CAF1 下只回一行，重试一次（ECU 首帧偶尔丢）。
+        best = await _sendCmd('0902', expectMarker: '49', timeoutMs: 3000);
+        info = VinInfo.parse(best.text);
+      }
+      return info;
+    } catch (_) {
+      return null;
+    } finally {
+      await _sendCmd('ATCAF0', expectMarker: 'OK', timeoutMs: 800);
+      await _sendCmd('ATH0', expectMarker: 'OK', timeoutMs: 400);
+    }
+  }
+
+  /// 请求 → 正响应标记（CAF0/ATH0 紧凑帧下首字节即模式 + 0x40）。
+  static String? _responseMarker(String cmd) {
+    if (cmd.startsWith('AT')) return 'OK';
+    final mode = int.tryParse(cmd.substring(0, 2), radix: 16);
+    if (mode == null) return null;
+    switch (mode) {
+      case 0x01:
+        return '41';
+      case 0x02:
+        return '42';
+      case 0x03:
+        return '43';
+      case 0x04:
+        return '44';
+      case 0x09:
+        return '49';
+      case 0x21:
+        return '61';
+      case 0x22:
+        return '62';
+      default:
+        return null;
+    }
+  }
+
+  /// Mode 22（UDS ReadDataByIdentifier）支持位图探测的基址：
+  /// 22 00 / 22 20 / … / 22 E0，每组回 4 字节掩码。
+  static const List<int> mode22Bases = [0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0, 0xE0];
+
+  /// 探测本车 ECU 实际支持的 Mode 22 扩展 PID。
+  ///
+  /// FORScan 的马自达 PID 表未公开，不能凭空写死地址；正确做法是问 ECU
+  /// “你支持哪些” —— 未支持组返回 NO DATA / 7F 22 31，支持组回 62 XX + 掩码。
+  Future<Mode22Result> probeMode22({void Function(int base)? onProgress}) async {
+    if (!_connected) {
+      return const Mode22Result(supported: {}, raw: {}, error: 'OBD 未连接');
+    }
+    final supported = <int>{};
+    final raw = <int, String>{};
+    var responded = 0;
+    for (final base in mode22Bases) {
+      onProgress?.call(base);
+      final hex = base.toRadixString(16).padLeft(2, '0').toUpperCase();
+      final r = await _sendCmd('22$hex', expectMarker: '62', timeoutMs: 1000);
+      raw[base] = r.hasData ? r.text : '';
+      final mask = parseMode22Mask(base, r.text);
+      if (mask.isEmpty) continue;
+      responded++;
+      supported.addAll(mask);
+    }
+    _log('Mode 22 探测：${responded} 组应答，支持 ${supported.length} 个扩展 PID');
+    return Mode22Result(
+      supported: supported,
+      raw: raw,
+      respondedRanges: responded,
+    );
+  }
+
+  /// 解析一组 `22 XX` 应答里的 4 字节支持位图（UDS 惯例：首字节最高位 = XX+1）。
+  /// 无正响应 / 否定响应 / 长度不足时返回空集。
+  static Set<int> parseMode22Mask(int base, String raw) {
+    final out = <int>{};
+    final s = _cleanHex(raw);
+    final hex = base.toRadixString(16).padLeft(2, '0').toUpperCase();
+    final idx = s.indexOf('62$hex');
+    if (idx < 0) return out;
+    final start = idx + 4;
+    if (start + 8 > s.length) return out;
+    for (var bit = 0; bit < 32; bit++) {
+      final off = start + (bit ~/ 8) * 2;
+      final b = int.tryParse(s.substring(off, off + 2), radix: 16);
+      if (b == null) return out;
+      if ((b >> (7 - bit % 8)) & 1 == 1) {
+        final pid = base + bit + 1;
+        if (pid <= 0xFF) out.add(pid); // 掩码只覆盖低字节 DID
+      }
+    }
+    return out;
+  }
+
+  static String _cleanHex(String raw) {
+    var s = raw.toUpperCase();
+    for (final n in ['SEARCHING...', 'SEARCHING', 'NO DATA', 'STOPPED', '>', '?']) {
+      s = s.replaceAll(n, '');
+    }
+    return s.replaceAll(RegExp(r'[\s\r\n]'), '');
   }
 
   /// 行流回调（BLE/USB 共用同一套组帧）。
@@ -477,6 +632,7 @@ class ObdService {
       rpm: get(Pid.rpm).round(),
       speed: get(Pid.speed),
       coolant: getOrNull(Pid.coolant),
+      oilTemp: getOrNull(Pid.oilTemp),
       intakeTemp: getOrNull(Pid.intakeTemp),
       ambient: getOrNull(Pid.ambient),
       voltage: getOrNull(Pid.voltage),
@@ -582,4 +738,41 @@ class ClearDtcResult {
 
   /// 失败原因。
   final String? error;
+}
+
+/// Mode 22 扩展 PID 探测结果。
+class Mode22Result {
+  const Mode22Result({
+    required this.supported,
+    required this.raw,
+    this.respondedRanges = 0,
+    this.error,
+  });
+
+  /// 本车 ECU 应答支持的 0x22 PID 编号（十进制，如 0x11 = 17）。
+  final Set<int> supported;
+
+  /// 每个基址的原始应答，供诊断页显示（排错用）。
+  final Map<int, String> raw;
+
+  /// 有正响应的基址组数（0 = ECU 完全不开放扩展数据）。
+  final int respondedRanges;
+
+  final String? error;
+
+  bool get isEmpty => supported.isEmpty;
+
+  /// 支持列表，形如 “22 11 · 22 1E · 22 F4”。
+  List<String> get labels => (supported.toList()..sort())
+      .map((p) => '22 ${p.toRadixString(16).padLeft(2, '0').toUpperCase()}')
+      .toList();
+
+  String get summary {
+    if (error != null) return error!;
+    if (supported.isEmpty) {
+      return 'ECU 未开放 Mode 22 扩展数据（$respondedRanges/8 组应答）。'
+          '通用 OBD 的转速/车速/水温仍可用，档位继续按齿比反推。';
+    }
+    return 'ECU 支持 ${supported.length} 个扩展 PID（$respondedRanges/8 组应答）。';
+  }
 }

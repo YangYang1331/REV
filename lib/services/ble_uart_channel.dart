@@ -56,31 +56,70 @@ class BleUartChannel implements ObdTransport {
   /// 绑定 / 切换目标设备（重连前可更新）。
   void setDevice(BluetoothDevice device) => _device = device;
 
+  /// 常见 ELM327 BLE 透传服务的特征匹配表（按命中率排序）。
+  ///
+  /// - 6e4000xx：Nordic UART（多数 DIY 模块）
+  /// - FFE0/FFE1：HM-10 / CC2541 系（Vgate iCar Pro 2S、部分 iCar Pro BLE 4.0）
+  /// - FFF0/FFF1/FFF2：老款 HC-08 / 双通道模块
+  /// - 18F0/2AF0：部分国产 ELM327 BLE
+  static const List<List<String>> _uartProfiles = [
+    ['6e400001', '6e400002', '6e400003'],
+    ['ffe0', 'ffe1', 'ffe1'],
+    ['fff0', 'fff1', 'fff2'],
+    ['18f0', '2af0', '2af0'],
+    ['ffe5', 'ffe9', 'ffe9'],
+  ];
+
+  static bool _uuidIs(String uuid, String prefix) =>
+      uuid.toLowerCase().replaceAll('-', '').startsWith(prefix);
+
+  /// 找写入/通知特征：先按已知服务表，再退化为"任意可写 + 可通知"的服务。
+  static (BluetoothCharacteristic, BluetoothCharacteristic)? _pickChars(
+      List<BluetoothService> services) {
+    for (final p in _uartProfiles) {
+      for (final s in services) {
+        if (!_uuidIs(s.uuid.str, p[0])) continue;
+        BluetoothCharacteristic? tx;
+        BluetoothCharacteristic? rx;
+        for (final c in s.characteristics) {
+          final cu = c.uuid.str;
+          final writable =
+              c.properties.write || c.properties.writeWithoutResponse;
+          if (writable && _uuidIs(cu, p[1])) tx = c;
+          if (c.properties.notify && _uuidIs(cu, p[2])) rx = c;
+        }
+        if (tx != null && rx != null) return (tx, rx);
+      }
+    }
+    // 兜底：不认 UUID，按特征属性配对（ELM327 转接板五花八门）。
+    for (final s in services) {
+      BluetoothCharacteristic? tx;
+      BluetoothCharacteristic? rx;
+      for (final c in s.characteristics) {
+        if (c.properties.write || c.properties.writeWithoutResponse) tx ??= c;
+        if (c.properties.notify || c.properties.indicate) rx ??= c;
+      }
+      if (tx != null && rx != null) return (tx, rx);
+    }
+    return null;
+  }
+
   @override
   Future<bool> connect() async {
     final device = _device;
     if (device == null) return false;
     try {
       await device.connect(timeout: const Duration(seconds: 12));
+      // 批量 PID 响应会超过默认 20 字节 MTU；安卓尽量要 185，失败不影响连接。
+      try {
+        await device.requestMtu(185);
+      } catch (_) {}
       final services = await device.discoverServices();
-      BluetoothCharacteristic? tx;
-      BluetoothCharacteristic? rx;
-      for (final s in services) {
-        // Nordic UART Service：uuid 以 6e400001 开头
-        if (s.uuid.str.toLowerCase().startsWith('6e400001')) {
-          for (final c in s.characteristics) {
-            if (c.uuid.str.toLowerCase().startsWith('6e4000')) {
-              if (c.properties.write || c.properties.writeWithoutResponse) {
-                tx = c;
-              }
-              if (c.properties.notify) rx = c;
-            }
-          }
-        }
+      final picked = _pickChars(services);
+      if (picked == null) {
+        throw Exception('未找到可写的串口特征（已尝试 NUS/FFE0/FFF0/18F0）');
       }
-      if (tx == null || rx == null) {
-        throw Exception('未找到 NUS 特征');
-      }
+      final (tx, rx) = picked;
       _tx = tx;
       _rx = rx;
       await rx.setNotifyValue(true);

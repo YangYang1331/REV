@@ -23,12 +23,16 @@ import 'package:obd_dashboard/features/dashboard/widgets/danger_overlay.dart';
 import 'package:obd_dashboard/features/dashboard/widgets/data_mode_selector.dart';
 import 'package:obd_dashboard/features/dashboard/widgets/demo_seal.dart';
 import 'package:obd_dashboard/features/dashboard/widgets/alert_flash.dart';
+import 'package:obd_dashboard/features/dashboard/widgets/alarm_banner.dart';
+import 'package:obd_dashboard/features/alarm/alarm_settings_screen.dart';
 import 'package:obd_dashboard/features/dashboard/tiles/tiles_board_screen.dart';
+import 'package:obd_dashboard/features/maintenance/maintenance_screen.dart';
 import 'package:obd_dashboard/features/diagnostic/data_stream_screen.dart';
 import 'package:obd_dashboard/features/health/health_report_screen.dart';
 import 'package:obd_dashboard/features/debug/debug_ball.dart';
 import 'package:obd_dashboard/models/obd_data.dart';
 import 'package:obd_dashboard/services/engine_sound_service.dart';
+import 'package:obd_dashboard/services/auto_connect.dart';
 import 'package:obd_dashboard/services/sound_service.dart';
 import 'package:obd_dashboard/features/diagnostic/diagnostic_screen.dart';
 import 'package:obd_dashboard/features/health/battery_health_screen.dart';
@@ -44,7 +48,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen>
+    with WidgetsBindingObserver {
   bool _chrome = true;
   bool _hud = false;
 
@@ -69,10 +74,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       idleRpm: t.profile.idleRpm.toDouble(),
       redlineRpm: t.profile.redlineRpm.toDouble(),
     );
+    // 冷启动（含开机自启）直接停在仪表盘：按上次设备自动连一次，
+    // 免得每次上车还要手动进连接页。失败静默，不打扰演示模式。
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoConnect());
+  }
+
+  void _autoConnect() {
+    final obd = ref.read(obdServiceProvider);
+    final tele = ref.read(telemetryProvider);
+    AutoConnect.tryKnown(obd: obd, tele: tele);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // 回到前台（导航切走、熄屏、车机休眠唤醒）时补一次重连。
+    if (state == AppLifecycleState.resumed) _autoConnect();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     // ignore: discarded_futures
     EngineSoundService.instance.onExitDashboard();
@@ -148,8 +171,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         () => const PerfScreen()),
                     _menuTile(Icons.flag, '圈速计时', '赛道圈速 / 最佳记录',
                         () => const LapScreen()),
-                    _menuTile(Icons.route, '行程记录', '里程 / 油耗历史',
+                    _menuTile(Icons.route, '行程记录', '里程 / 油耗历史 / 轨迹回放',
                         () => const TripsScreen()),
+                    _menuTile(Icons.build_circle_outlined, '保养提醒',
+                        '机油 / 轮胎 / 年检倒计时',
+                        () => const MaintenanceScreen()),
+                    _menuTile(Icons.notifications_active_outlined, '报警与语音',
+                        '阈值 / 语音播报 / 报警记录',
+                        () => const AlarmSettingsScreen()),
                     _menuTile(Icons.build, '诊断 / 故障码', '实时数据流 / DTC',
                         () => const DiagnosticScreen()),
                     _menuTile(Icons.battery_charging_full, '电池健康', '启动压降 / 充电检测',
@@ -218,6 +247,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 active: _danger, reason: _dangerReason, skin: skin),
             // 超限数值边角闪烁（与全屏红屏互补）
             const AlertFlash(),
+            // 报警横幅（水温/油温/电压/超速，6 秒自动收起）
+            const Positioned(
+              top: 60,
+              left: 0,
+              right: 0,
+              child: AlarmBanner(),
+            ),
             // 演示模式明显封条
             if (t.isOffline) const DemoSeal(),
             // 调试悬浮球（仅 debug 构建，release 不渲染）

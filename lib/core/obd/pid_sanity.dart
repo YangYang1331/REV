@@ -27,6 +27,7 @@ class PidSanity {
       case Pid.speed:
         return v >= 0 && v <= 260;
       case Pid.coolant:
+      case Pid.oilTemp:
       case Pid.intakeTemp:
       case Pid.ambient:
         // -40 是 ECU 未定义哨兵，允许；真水温极少 > 150。
@@ -70,6 +71,7 @@ class PidSanity {
         // 0.1s 内车速突变 > 20 km/h 不可能（急刹车 g≈2 也只 ~7 km/h/0.1s）。
         return d <= 25;
       case Pid.coolant:
+      case Pid.oilTemp:
       case Pid.intakeTemp:
       case Pid.ambient:
       case Pid.catTemp:

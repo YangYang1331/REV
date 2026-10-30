@@ -7,22 +7,89 @@ class TripRec {
     required this.km,
     required this.fuel,
     required this.sec,
+    this.maxSpeed = 0,
+    this.harshAccel = 0,
+    this.harshBrake = 0,
+    this.idleSec = 0,
+    this.violations = 0,
+    this.track = const [],
   });
   final int ts;
   final double km;
   final double fuel;
   final double sec;
 
+  /// 本段最高车速（km/h）。
+  final double maxSpeed;
+
+  /// 急加速 / 急减速次数（|纵向 G| ≥ 0.25g 计数）。
+  final int harshAccel;
+  final int harshBrake;
+
+  /// 怠速时长（车速 <3km/h 且转速 >400 的秒数）。
+  final double idleSec;
+
+  /// 本段超速报警次数。
+  final int violations;
+
+  /// GPS 轨迹：`[lat, lng, speed]`，最多 300 点。
+  final List<List<double>> track;
+
   double get avgSpeed => sec > 0 ? km / (sec / 3600.0) : 0;
   double? get l100 => km > 0.05 ? fuel / km * 100.0 : null;
 
-  Map<String, dynamic> toJson() =>
-      {'ts': ts, 'km': km, 'fuel': fuel, 'sec': sec};
+  /// 驾驶评分（0–100）：急加速/急刹/怠速占比/超速扣分，里程太短不给分。
+  int? get score {
+    if (km < 0.3 || sec < 30) return null;
+    var s = 100.0;
+    s -= harshAccel * 3.0;
+    s -= harshBrake * 4.0;
+    final idleRatio = sec > 0 ? idleSec / sec : 0.0;
+    if (idleRatio > 0.4) s -= (idleRatio - 0.4) * 60.0;
+    s -= violations * 2.0;
+    final avg = avgSpeed;
+    if (avg > 110) s -= 5.0;
+    return s.clamp(0, 100).round();
+  }
+
+  String get scoreLabel {
+    final s = score;
+    if (s == null) return '--';
+    if (s >= 90) return '优秀';
+    if (s >= 75) return '良好';
+    if (s >= 60) return '一般';
+    return '偏激烈';
+  }
+
+  Map<String, dynamic> toJson() => {
+        'ts': ts,
+        'km': km,
+        'fuel': fuel,
+        'sec': sec,
+        if (maxSpeed > 0) 'maxSpeed': maxSpeed,
+        if (harshAccel > 0) 'ha': harshAccel,
+        if (harshBrake > 0) 'hb': harshBrake,
+        if (idleSec > 0) 'idle': idleSec,
+        if (violations > 0) 'viol': violations,
+        if (track.isNotEmpty) 'track': track,
+      };
   factory TripRec.fromJson(Map<String, dynamic> j) => TripRec(
         ts: (j['ts'] as num?)?.toInt() ?? 0,
         km: (j['km'] as num?)?.toDouble() ?? 0,
         fuel: (j['fuel'] as num?)?.toDouble() ?? 0,
         sec: (j['sec'] as num?)?.toDouble() ?? 0,
+        maxSpeed: (j['maxSpeed'] as num?)?.toDouble() ?? 0,
+        harshAccel: (j['ha'] as num?)?.toInt() ?? 0,
+        harshBrake: (j['hb'] as num?)?.toInt() ?? 0,
+        idleSec: (j['idle'] as num?)?.toDouble() ?? 0,
+        violations: (j['viol'] as num?)?.toInt() ?? 0,
+        track: (j['track'] as List?)
+                ?.whereType<List>()
+                .map((e) => e
+                    .map((v) => (v as num).toDouble())
+                    .toList(growable: false))
+                .toList(growable: false) ??
+            const [],
       );
 }
 
@@ -56,6 +123,20 @@ class AppStore {
   static const _kGearMap = 'rev_gear_shift_map';
   static const _kOledPowerSave = 'rev_oled_power_save';
   static const _kSpeedLimitKmh = 'rev_speed_limit_kmh';
+  static const _kPrivacyConsent = 'rev_privacy_consent';
+  static const _kGpsUpload = 'rev_gps_upload';
+  static const _kCloudUpload = 'rev_cloud_upload';
+  static const _kLastVin = 'rev_last_vin';
+
+  /// 隐私政策版本：用户同意的版本号必须 >= 该值才会放行。
+  /// 条款有实质变化时 +1，老用户会被重新询问一次。
+  static const int privacyVersion = 1;
+
+  /// GPS 轨迹是否随帧上传（敏感个人信息，默认关，需单独同意）。
+  static bool gpsUpload = false;
+
+  /// 是否允许把车辆数据上报到云端看板（默认开；"仅本地使用"时关）。
+  static bool cloudUpload = true;
 
   /// 地平线动效同步缓存：进仪表盘皮肤/开屏时同步读取，避免每次异步等待。
   /// 默认 true；在 [load] 中从本地恢复，[setHorizonFx] 写入时同步更新。
@@ -83,7 +164,40 @@ class AppStore {
     bestBrake = p.getDouble(_kBestBrake);
     horizonFx = p.getBool(_kHorizonFx) ?? true;
     videoSplash = p.getBool(_kVideoSplash) ?? true;
+    gpsUpload = p.getBool(_kGpsUpload) ?? false;
+    cloudUpload = p.getBool(_kCloudUpload) ?? true;
   }
+
+  // ---- 隐私 / 数据授权 ----
+  /// 已同意的隐私政策版本；未同意返回 0。
+  Future<int> getPrivacyConsent() async =>
+      (await _prefs).getInt(_kPrivacyConsent) ?? 0;
+
+  Future<bool> getPrivacyAccepted() async =>
+      (await getPrivacyConsent()) >= privacyVersion;
+
+  Future<void> setPrivacyConsent(int version) async =>
+      (await _prefs).setInt(_kPrivacyConsent, version);
+
+  Future<bool> getGpsUpload() async =>
+      (await _prefs).getBool(_kGpsUpload) ?? false;
+
+  Future<void> setGpsUpload(bool v) async {
+    gpsUpload = v;
+    await (await _prefs).setBool(_kGpsUpload, v);
+  }
+
+  Future<bool> getCloudUpload() async =>
+      (await _prefs).getBool(_kCloudUpload) ?? true;
+
+  Future<void> setCloudUpload(bool v) async {
+    cloudUpload = v;
+    await (await _prefs).setBool(_kCloudUpload, v);
+  }
+
+  Future<String?> getLastVin() async => (await _prefs).getString(_kLastVin);
+  Future<void> setLastVin(String vin) async =>
+      (await _prefs).setString(_kLastVin, vin);
 
   /// 更新最佳成绩，返回是否刷新纪录
   Future<bool> recordBest(
@@ -132,6 +246,11 @@ class AppStore {
     final p = await _prefs;
     await p.setString(_kTrips,
         jsonEncode(trips.map((t) => t.toJson()).toList()));
+    // 累计里程：保养提醒靠它推算"距离上次保养又跑了多少"。
+    try {
+      final accum = (p.getDouble(_kOdoAccum) ?? 0) + rec.km;
+      await p.setDouble(_kOdoAccum, accum);
+    } catch (_) {}
   }
 
   Future<void> clearTrips() async {
@@ -299,4 +418,183 @@ class AppStore {
       (await _prefs).getInt(_kSpeedLimitKmh) ?? 0;
   Future<void> setSpeedLimitKmh(int v) async =>
       (await _prefs).setInt(_kSpeedLimitKmh, v);
+
+  // ---- 报警配置 ----
+  static const _kAlarmCfg = 'rev_alarm_cfg';
+
+  Future<AlarmConfig> loadAlarmConfig() async {
+    final raw = (await _prefs).getString(_kAlarmCfg);
+    if (raw == null || raw.isEmpty) return const AlarmConfig();
+    try {
+      return AlarmConfig.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return const AlarmConfig();
+    }
+  }
+
+  Future<void> saveAlarmConfig(AlarmConfig c) async =>
+      (await _prefs).setString(_kAlarmCfg, jsonEncode(c.toJson()));
+
+  // ---- 保养提醒 ----
+  static const _kMaint = 'rev_maintenance';
+  static const _kOdoAccum = 'rev_odo_accum_km';
+
+  /// App 记录到的累计里程（只要存过行程就累加，用于推算"距离上次保养又跑了多少"）。
+  Future<double> getOdoAccumKm() async =>
+      (await _prefs).getDouble(_kOdoAccum) ?? 0;
+
+  Future<MaintState> loadMaintState() async {
+    final raw = (await _prefs).getString(_kMaint);
+    final accum = await getOdoAccumKm();
+    if (raw == null || raw.isEmpty) return MaintState(accumKm: accum);
+    try {
+      return MaintState.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>, accum);
+    } catch (_) {
+      return MaintState(accumKm: accum);
+    }
+  }
+
+  Future<void> saveMaintState(MaintState s) async =>
+      (await _prefs).setString(_kMaint, jsonEncode(s.toJson()));
+}
+
+/// 报警阈值配置（持久化）。
+class AlarmConfig {
+  const AlarmConfig({
+    this.enabled = true,
+    this.voice = true,
+    this.sound = true,
+    this.coolantHighC = 105,
+    this.oilHighC = 130,
+    this.voltageLowV = 11.8,
+    this.voltageHighV = 15.2,
+    this.speedLimitKmh = 0,
+  });
+  final bool enabled;
+  final bool voice;
+  final bool sound;
+  final int coolantHighC;
+  final int oilHighC;
+  final double voltageLowV;
+  final double voltageHighV;
+  final int speedLimitKmh;
+
+  Map<String, dynamic> toJson() => {
+        'en': enabled,
+        'voice': voice,
+        'sound': sound,
+        'cool': coolantHighC,
+        'oil': oilHighC,
+        'vlo': voltageLowV,
+        'vhi': voltageHighV,
+        'spd': speedLimitKmh,
+      };
+
+  factory AlarmConfig.fromJson(Map<String, dynamic> j) => AlarmConfig(
+        enabled: j['en'] as bool? ?? true,
+        voice: j['voice'] as bool? ?? true,
+        sound: j['sound'] as bool? ?? true,
+        coolantHighC: (j['cool'] as num?)?.toInt() ?? 105,
+        oilHighC: (j['oil'] as num?)?.toInt() ?? 130,
+        voltageLowV: (j['vlo'] as num?)?.toDouble() ?? 11.8,
+        voltageHighV: (j['vhi'] as num?)?.toDouble() ?? 15.2,
+        speedLimitKmh: (j['spd'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// 保养状态：里程锚点 + 最近一次各项保养的里程/时间。
+///
+/// 车没有"总里程"这个标准 PID，所以用「用户填一次当前仪表里程 + App 自己累加
+/// 行程里程」来推算，偏差随时间可控（每次用户再填一次就自动校准）。
+class MaintState {
+  const MaintState({
+    this.accumKm = 0,
+    this.odoAnchorKm,
+    this.odoAnchorAccumKm = 0,
+    this.lastOilOdoKm,
+    this.lastTireOdoKm,
+    this.lastInspectTs,
+    this.intervalOilKm = 8000,
+    this.intervalTireKm = 40000,
+    this.intervalInspectDays = 365,
+  });
+
+  final double accumKm;
+  final double? odoAnchorKm;
+  final double odoAnchorAccumKm;
+  final double? lastOilOdoKm;
+  final double? lastTireOdoKm;
+  final int? lastInspectTs;
+  final int intervalOilKm;
+  final int intervalTireKm;
+  final int intervalInspectDays;
+
+  /// 当前估算总里程（未填过锚点时为 null）。
+  double? get currentOdoKm => odoAnchorKm == null
+      ? null
+      : odoAnchorKm! + (accumKm - odoAnchorAccumKm);
+
+  double? get sinceOilKm {
+    final odo = currentOdoKm;
+    if (odo == null || lastOilOdoKm == null) return null;
+    return odo - lastOilOdoKm!;
+  }
+
+  double? get sinceTireKm {
+    final odo = currentOdoKm;
+    if (odo == null || lastTireOdoKm == null) return null;
+    return odo - lastTireOdoKm!;
+  }
+
+  int? get sinceInspectDays => lastInspectTs == null
+      ? null
+      : DateTime.now()
+          .difference(DateTime.fromMillisecondsSinceEpoch(lastInspectTs!))
+          .inDays;
+
+  Map<String, dynamic> toJson() => {
+        'anchor': odoAnchorKm,
+        'anchorAccum': odoAnchorAccumKm,
+        'oilOdo': lastOilOdoKm,
+        'tireOdo': lastTireOdoKm,
+        'inspectTs': lastInspectTs,
+        'iOil': intervalOilKm,
+        'iTire': intervalTireKm,
+        'iDays': intervalInspectDays,
+      };
+
+  factory MaintState.fromJson(Map<String, dynamic> j, double accum) => MaintState(
+        accumKm: accum,
+        odoAnchorKm: (j['anchor'] as num?)?.toDouble(),
+        odoAnchorAccumKm: (j['anchorAccum'] as num?)?.toDouble() ?? 0,
+        lastOilOdoKm: (j['oilOdo'] as num?)?.toDouble(),
+        lastTireOdoKm: (j['tireOdo'] as num?)?.toDouble(),
+        lastInspectTs: (j['inspectTs'] as num?)?.toInt(),
+        intervalOilKm: (j['iOil'] as num?)?.toInt() ?? 8000,
+        intervalTireKm: (j['iTire'] as num?)?.toInt() ?? 40000,
+        intervalInspectDays: (j['iDays'] as num?)?.toInt() ?? 365,
+      );
+
+  MaintState copyWith({
+    double? odoAnchorKm,
+    double? odoAnchorAccumKm,
+    double? lastOilOdoKm,
+    double? lastTireOdoKm,
+    int? lastInspectTs,
+    int? intervalOilKm,
+    int? intervalTireKm,
+    int? intervalInspectDays,
+  }) =>
+      MaintState(
+        accumKm: accumKm,
+        odoAnchorKm: odoAnchorKm ?? this.odoAnchorKm,
+        odoAnchorAccumKm: odoAnchorAccumKm ?? this.odoAnchorAccumKm,
+        lastOilOdoKm: lastOilOdoKm ?? this.lastOilOdoKm,
+        lastTireOdoKm: lastTireOdoKm ?? this.lastTireOdoKm,
+        lastInspectTs: lastInspectTs ?? this.lastInspectTs,
+        intervalOilKm: intervalOilKm ?? this.intervalOilKm,
+        intervalTireKm: intervalTireKm ?? this.intervalTireKm,
+        intervalInspectDays: intervalInspectDays ?? this.intervalInspectDays,
+      );
 }

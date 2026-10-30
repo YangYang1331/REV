@@ -30,6 +30,8 @@ const LOGIN_IP_LIMIT = 30;
 const LOGIN_USER_LIMIT = 10;
 const REGISTER_IP_LIMIT = 10;
 const HISTORY_MAX_BUCKETS = 10080; // 7 days * 24h * 60min
+// 历史默认口令只从环境变量读取，避免把真实口令写进源码/仓库。
+const LEGACY_ADMIN_PASS = process.env.LEGACY_ADMIN_PASSWORD || '';
 
 const DATA_DIR = path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -152,7 +154,7 @@ function createToken() { return crypto.randomBytes(32).toString('hex'); }
     } else {
       console.log(`[auth] 已初始化管理员账号 admin，随机口令：${pwd}（仅显示一次，登录后请立即修改）`);
     }
-  } else if (findUser('admin') && verifyPassword('***REMOVED***', findUser('admin').salt, findUser('admin').scryptHash)) {
+  } else if (LEGACY_ADMIN_PASS && findUser('admin') && verifyPassword(LEGACY_ADMIN_PASS, findUser('admin').salt, findUser('admin').scryptHash)) {
     if (process.env.ADMIN_ALLOW_DEFAULT === '1') {
       console.warn('[auth][警告] 管理员仍在使用历史默认口令，ADMIN_ALLOW_DEFAULT=1 已豁免自动重置。');
     } else {

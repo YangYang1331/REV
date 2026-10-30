@@ -430,14 +430,25 @@ function serveDownload(req, res, spec, send) {
   const fp = path.join(__dirname, 'download', spec.file);
   let st;
   try { st = fs.statSync(fp); } catch (e) { return send(404, { ok: false, error: 'file missing' }); }
+  const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
   const headers = {
     ...SEC_HEADERS,
     'Content-Type': spec.type,
     'Accept-Ranges': 'bytes',
     'Content-Disposition': `attachment; filename="${spec.name}"`,
-    'Cache-Control': 'public, max-age=3600',
+    // 文件名固定（rev-latest.apk），不能给长缓存：否则发新版本后浏览器
+    // 仍会把上一次的旧包直接还给安装器（用户看到"2.16.1 -> 2.16.1"）。
+    // 改用 ETag + Last-Modified 让浏览器回源校验，未变时仍拿 304。
+    'Cache-Control': 'no-cache',
+    'ETag': etag,
+    'Last-Modified': new Date(st.mtimeMs).toUTCString(),
     'Access-Control-Allow-Origin': '*',
   };
+  const inm = req.headers['if-none-match'];
+  if (inm && inm.split(',').map((v) => v.trim()).includes(etag)) {
+    res.writeHead(304, { ...SEC_HEADERS, 'ETag': etag, 'Cache-Control': 'no-cache' });
+    return res.end();
+  }
   const range = req.headers['range'];
   const m = range && /^bytes=(\d*)-(\d*)$/.exec(String(range).trim());
   if (m && (m[1] || m[2])) {
@@ -878,9 +889,10 @@ const handler = async (req, res) => {
     const base = `${proto}://${host}`;
     return send(200, {
       ...LATEST,
-      apkUrl: base + '/download/rev-latest.apk',
-      carUrl: base + '/download/rev-car.apk',
-      sourceUrl: base + '/download/REV-Flutter-source.zip',
+      // 带版本号：发新版即换 URL，客户端/系统浏览器不会命中旧包缓存
+      apkUrl: `${base}/download/rev-latest.apk?v=${LATEST.versionCode}`,
+      carUrl: `${base}/download/rev-car.apk?v=${LATEST.versionCode}`,
+      sourceUrl: `${base}/download/REV-Flutter-source.zip?v=${LATEST.versionCode}`,
     });
   }
   if (url.pathname.startsWith('/download/')) {
@@ -891,7 +903,10 @@ const handler = async (req, res) => {
 
   /* ---- 看板 ---- */
   if (url.pathname === '/' || url.pathname === '/index.html') {
-    return send(200, fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8'),
+    const html = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8')
+      .replace(/\/download\/([A-Za-z0-9._-]+)(?!\?v=)/g,
+        `/download/$1?v=${LATEST.versionCode}`);
+    return send(200, html,
       'text/html; charset=utf-8',
       { 'Content-Security-Policy': CSP_DASHBOARD, 'Cache-Control': 'no-cache' });
   }

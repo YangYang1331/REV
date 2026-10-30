@@ -1,5 +1,5 @@
 /*
- * REV 云端服务 v2.16.0（历史趋势 + 车队共享 + viewer 角色）
+ * REV 云端服务 v2.16.1（历史趋势 + 车队共享 + viewer 角色）
  * 零依赖 Node.js（v18+，仅内置 http/fs/path/crypto/https）
  *
  * v2.16.0 新增：
@@ -391,8 +391,8 @@ function sweepDevices() {
 
 /* ---------------- 版本清单 ---------------- */
 const LATEST = {
-  versionCode: 51, versionName: '2.16.0',
-  notes: 'v2.16.0：①历史趋势：分钟级聚合环形缓冲（7 天 10080 桶），GET /api/v1/history 返回最多 500 点趋势数据，看板 canvas 折线图。②车队共享：owner/admin 可 POST /api/v1/share 把只读权限分享给其他用户，被共享者看板显示"只读共享"标记。③viewer 角色：只读，不能上报/分享。④设备列表返回 perm 字段（owner/share/admin）。',
+  versionCode: 52, versionName: '2.16.1',
+  notes: 'v2.16.1：目录重构。①首页菜单按场景分组：驾驶 / 诊断与养护 / 车辆与系统，入口不再平铺。②「皮肤与设置」拆成设置总入口 + 子页：皮肤与显示、车辆与校准、账号与云端、关于与更新。③连接向导 / 报警语音 / 保养提醒 / 云端趋势按用途归位，设置首页新增「当前配置」状态卡。功能、皮肤、账号与车辆数据全部保留。',
 };
 
 /* ---------------- 静态下载表 ---------------- */
@@ -903,7 +903,7 @@ const server = http.createServer(handler);
 const server80 = http.createServer(handler);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`REV server v2.16.0 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
+  console.log(`REV server v2.16.1 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
 });
 
 server80.on('error', (e) => {

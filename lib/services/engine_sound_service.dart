@@ -174,7 +174,7 @@ class EngineSoundService {
           is32bit: _is32BitProcess(),
           quality: _audioQuality);
       final src = await SoLoud.instance
-          .loadAsset('assets/audio/packs/$id/$bit/loop_idle.m4a');
+          .loadAsset('assets/audio/packs/$id/$bit/loop_idle.flac');
       final h = _bus?.play(src, volume: 0.5, looping: true);
       await Future.delayed(const Duration(seconds: 2));
       if (h != null) SoLoud.instance.stop(h);
@@ -513,7 +513,7 @@ class EngineSoundService {
     for (final band in bands) {
       if (!pack.bands.contains(band)) continue;
       try {
-        final src = await loadBand('loop_$band.m4a');
+        final src = await loadBand('loop_$band.flac');
         final h = _bus!.play(src, volume: 0.0001, looping: true);
         _loopSources[band] = src;
         _loopHandles[band] = h;

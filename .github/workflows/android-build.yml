@@ -1,0 +1,37 @@
+name: Android build (编译验证)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 依赖
+        run: flutter pub get
+      - name: 构建 release（无 key.properties 时自动回退 debug 签名，仅验证可编译）
+        run: |
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --dart-define=BUILD_VARIANT=phone
+      - name: 产物信息
+        run: |
+          ls -lh build/app/outputs/flutter-apk/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rev-apk-ci
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7

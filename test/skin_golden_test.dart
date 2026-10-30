@@ -25,6 +25,10 @@ import 'package:obd_dashboard/features/dashboard/skins/supercar_dashboard.dart';
 import 'package:obd_dashboard/features/dashboard/skins/touge_dashboard.dart';
 import 'package:obd_dashboard/models/obd_data.dart';
 
+// golden 像素对比依赖运行环境的字体/栅格化，默认跳过；需要时：
+//   flutter test test/skin_golden_test.dart --dart-define=RUN_GOLDEN=true
+const bool _runGolden = bool.fromEnvironment('RUN_GOLDEN');
+
 void main() {
   final profile = VehicleProfile.presets[0];
   final data = ObdData(
@@ -164,9 +168,9 @@ void main() {
       'cluster', 'cyanhex', 'supercar', 'ambergt', 'amberNerv']) {
     testWidgets('$id landscape', (tester) async {
       await shoot(tester, id, 'landscape', 1280, 720);
-    });
+    }, skip: !_runGolden);
     testWidgets('$id portrait', (tester) async {
       await shoot(tester, id, 'portrait', 720, 1280);
-    });
+    }, skip: !_runGolden);
   }
 }

@@ -63,7 +63,7 @@ class ApexDashboard extends StatelessWidget {
                   'assets/images/avatar_pilot.png',
                   fit: BoxFit.contain,
                   alignment: Alignment.bottomRight,
-                  cacheWidth: 720,
+                  filterQuality: FilterQuality.medium,
                 ),
               ),
             ),

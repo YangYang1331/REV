@@ -111,7 +111,7 @@ class AmberNervDashboard extends StatelessWidget {
             'assets/images/avatar_amber.png',
             fit: BoxFit.contain,
             alignment: Alignment.bottomRight,
-            cacheWidth: 720,
+            filterQuality: FilterQuality.medium,
           ),
         ),
       ),

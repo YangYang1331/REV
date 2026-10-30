@@ -1,0 +1,63 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# 签名/密钥/凭据（绝不提交到公开仓库）
+android/key.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+*.cer
+*.cert
+*.mobileprovision
+GoogleService-Info.plist
+
+# 开发草稿/内部工作目录（声浪原始素材、中间产物，不提交）
+scratch/
+docs-local/
+
+# Golden 测试失败产物（每次跑失败都会生成，不提交）
+test/failures/

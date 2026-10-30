@@ -1,0 +1,362 @@
+[
+  {
+    "engine": "ls_v8",
+    "band": "idle",
+    "src": "v8_idle2",
+    "start": 5.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "ls_v8",
+    "band": "low",
+    "src": "v8_rev",
+    "start": 30.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "ls_v8",
+    "band": "mid",
+    "src": "v8_rev",
+    "start": 75.566372,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "ls_v8",
+    "band": "high",
+    "src": "v8_rev",
+    "start": 76.066372,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "ls_v8",
+    "band": "bounce",
+    "src": "v8_rev",
+    "start": 77.066372,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "ls_v8",
+    "band": "pop",
+    "src": "pop",
+    "start": 2.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "idle",
+    "src": "superchg",
+    "start": 2.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "low",
+    "src": "superchg",
+    "start": 15.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "mid",
+    "src": "superchg",
+    "start": 20.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "high",
+    "src": "superchg",
+    "start": 25.0,
+    "dur": 3.0,
+    "out": 3.0
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "bounce",
+    "src": "superchg",
+    "start": 28.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "pop",
+    "src": "pop",
+    "start": 4.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "hellcat_supercharged",
+    "band": "whine",
+    "src": "whine",
+    "start": 1.0,
+    "dur": 0.8,
+    "out": 0.8
+  },
+  {
+    "engine": "v12",
+    "band": "idle",
+    "src": "v12_main",
+    "start": 5.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "v12",
+    "band": "low",
+    "src": "v12_main",
+    "start": 60.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "v12",
+    "band": "mid",
+    "src": "v12_main",
+    "start": 94.980998,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "v12",
+    "band": "high",
+    "src": "v12_main",
+    "start": 95.480998,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "v12",
+    "band": "bounce",
+    "src": "v12_main",
+    "start": 96.480998,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "v12",
+    "band": "pop",
+    "src": "pop",
+    "start": 6.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "idle",
+    "src": "v10_main",
+    "start": 10.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "low",
+    "src": "v10_main",
+    "start": 100.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "mid",
+    "src": "v10_main",
+    "start": 130.736984,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "high",
+    "src": "v10_main",
+    "start": 131.236984,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "bounce",
+    "src": "v10_main",
+    "start": 132.236984,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "lambo_v10",
+    "band": "pop",
+    "src": "pop",
+    "start": 8.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "idle",
+    "src": "inline4_long",
+    "start": 5.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "low",
+    "src": "inline4",
+    "start": 5.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "mid",
+    "src": "inline4",
+    "start": 15.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "high",
+    "src": "inline4",
+    "start": 25.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "bounce",
+    "src": "inline4",
+    "start": 35.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "mazda6_na",
+    "band": "pop",
+    "src": "pop",
+    "start": 1.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "idle",
+    "src": "inline6",
+    "start": 10.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "low",
+    "src": "inline6",
+    "start": 66.26678,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "mid",
+    "src": "inline6",
+    "start": 66.26678,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "high",
+    "src": "inline6",
+    "start": 66.76678,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "bounce",
+    "src": "inline6",
+    "start": 67.76678,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "pop",
+    "src": "pop",
+    "start": 3.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "bmw_s58",
+    "band": "blowoff",
+    "src": "blowoff",
+    "start": 10.0,
+    "dur": 0.5,
+    "out": 0.5
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "idle",
+    "src": "turbo4",
+    "start": 2.0,
+    "dur": 9.0,
+    "out": 9.0
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "low",
+    "src": "turbo4",
+    "start": 10.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "mid",
+    "src": "turbo4",
+    "start": 20.0,
+    "dur": 4.0,
+    "out": 4.0
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "high",
+    "src": "turbo4",
+    "start": 30.0,
+    "dur": 3.5,
+    "out": 3.5
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "bounce",
+    "src": "turbo4",
+    "start": 40.0,
+    "dur": 2.5,
+    "out": 2.5
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "pop",
+    "src": "pop",
+    "start": 5.0,
+    "dur": 0.6,
+    "out": 0.6
+  },
+  {
+    "engine": "ea888_20t",
+    "band": "blowoff",
+    "src": "blowoff",
+    "start": 20.0,
+    "dur": 0.5,
+    "out": 0.5
+  }
+]

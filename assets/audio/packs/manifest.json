@@ -1,0 +1,457 @@
+{
+  "packs": [
+    {
+      "id": "mazda6_na",
+      "name": "马自达6 2.0L 自吸",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "hellcat_supercharged",
+      "name": "地狱猫 6.2L 机增V8",
+      "turbo": false,
+      "supercharged": true,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": true,
+      "synthOnly": false
+    },
+    {
+      "id": "ls_v8",
+      "name": "通用 LS V8",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "lambo_v10",
+      "name": "兰博基尼 V10",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "v12",
+      "name": "法拉利 / 兰博 V12",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "bmw_s58",
+      "name": "宝马 S58 直六双涡轮",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "ea888_20t",
+      "name": "大众 EA888 2.0T",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "porsche_gt3",
+      "name": "保时捷 911 GT3",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "porsche_turbo",
+      "name": "保时捷 911 Turbo",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "audi_r8",
+      "name": "奥迪 R8 V10",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "nissan_gtr",
+      "name": "日产 GT-R R35",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "mazda_rotary",
+      "name": "马自达 RX-7/8 转子",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "honda_typer",
+      "name": "本田思域 Type R",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "mustang_gt",
+      "name": "福特野马 GT 5.0",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "corvette_c8",
+      "name": "雪佛兰科尔维特 C8",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "dodge_viper",
+      "name": "道奇蝰蛇 Viper",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "amg_c63",
+      "name": "奔驰 AMG C63",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "subaru_sti",
+      "name": "斯巴鲁 WRX STI",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "mitsubishi_evo",
+      "name": "三菱 Lancer Evo",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "lexus_lfa",
+      "name": "雷克萨斯 LFA",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "video_lfa_v10",
+      "name": "视频采样 · LFA V10",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "video_cockpit",
+      "name": "视频采样 · 驾驶舱巡航",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "video_corvette_v8",
+      "name": "视频采样 · 科尔维特 V8",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "video_aventador_v12",
+      "name": "视频采样 · 兰博 V12",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "video_rx8_rotary",
+      "name": "视频采样 · RX-8 转子",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "video_cruise",
+      "name": "视频采样 · 高速巡航",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [
+        "idle",
+        "low",
+        "mid",
+        "high",
+        "bounce"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": false
+    },
+    {
+      "id": "synth",
+      "name": "电子 / 概念车",
+      "turbo": false,
+      "supercharged": false,
+      "bands": [],
+      "hasPop": true,
+      "hasBlowoff": false,
+      "hasWhine": false,
+      "synthOnly": true
+    }
+  ]
+}

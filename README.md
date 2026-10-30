@@ -58,6 +58,8 @@ bash scripts/release_check.py # 校验版本/ABI 同构建/签名/zipalign，不
 - SSE 订阅改为一次性 ticket（60 s 有效、用后即焚），token 不再出现在 URL/访问日志里。
 - 服务端只接受 `Authorization: Bearer`，查询串里的 token 一律 401。
 - 默认管理员口令不再保留：首次启动检测到历史默认口令会换成随机强口令并打印一次。
+  确实需要沿用时，在服务环境里显式设置 `ADMIN_ALLOW_DEFAULT=1` 豁免，启动日志会一直
+  告警（自建内网/单人使用可以这么做，公网不建议）。
 
 **工程**
 - GitHub Actions CI：`flutter analyze` + `flutter test`（golden 默认跳过）+ 声音体检。

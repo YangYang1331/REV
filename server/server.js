@@ -1,5 +1,5 @@
 /*
- * REV 云端服务 v2.16.1（历史趋势 + 车队共享 + viewer 角色）
+ * REV 云端服务 v2.16.2（历史趋势 + 车队共享 + viewer 角色）
  * 零依赖 Node.js（v18+，仅内置 http/fs/path/crypto/https）
  *
  * v2.16.0 新增：
@@ -391,8 +391,8 @@ function sweepDevices() {
 
 /* ---------------- 版本清单 ---------------- */
 const LATEST = {
-  versionCode: 52, versionName: '2.16.1',
-  notes: 'v2.16.1：目录重构。①首页菜单按场景分组：驾驶 / 诊断与养护 / 车辆与系统，入口不再平铺。②「皮肤与设置」拆成设置总入口 + 子页：皮肤与显示、车辆与校准、账号与云端、关于与更新。③连接向导 / 报警语音 / 保养提醒 / 云端趋势按用途归位，设置首页新增「当前配置」状态卡。功能、皮肤、账号与车辆数据全部保留。',
+  versionCode: 53, versionName: '2.16.2',
+  notes: 'v2.16.2：深度诊断 + PDF 报告。①新增深度诊断页：排放就绪 I/M（Mode 01 PID 01，汽油/柴油位序）、待定故障码（Mode 07）、永久故障码（Mode 0A）、冻结帧（Mode 02 触发码 + 转速/车速/水温/负荷/电压快照）。②一键生成 A4 多页 PDF 诊断报告（车型/VIN/适配器/就绪状态/三类故障码中文释义与建议/冻结帧），每页用系统字体渲染后嵌入，不增加字体包体积。③设置目录重构延续 2.16.1。',
 };
 
 /* ---------------- 静态下载表 ---------------- */
@@ -903,7 +903,7 @@ const server = http.createServer(handler);
 const server80 = http.createServer(handler);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`REV server v2.16.1 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
+  console.log(`REV server v2.16.2 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
 });
 
 server80.on('error', (e) => {

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:obd_dashboard/core/obd/obd_pid.dart';
 import 'package:obd_dashboard/core/obd/obd_protocol.dart';
+import 'package:obd_dashboard/core/obd/deep_diagnostic.dart';
 import 'package:obd_dashboard/core/obd/pid_sanity.dart';
 import 'package:obd_dashboard/core/store/app_store.dart';
 import 'package:obd_dashboard/core/vehicle/vin.dart';
@@ -664,8 +665,59 @@ class ObdService {
     return codes;
   }
 
-  /// 清除故障码（Mode 04）：发 "04" → 等 OK → 重读 Mode 03。
+  /// 读取待定故障码（Mode 07）：故障已出现但尚未确认，常用于早期预警。
+  Future<List<String>> readPendingDtcs() async {
+    if (!_connected) return const [];
+    final r = await _sendCmd('07', expectMarker: '47', timeoutMs: 1500);
+    if (!r.hasData) return const [];
+    final codes = DeepDiagnosticCodec.parseCodes(r.text, '47');
+    _log('待定 DTC：${codes.isEmpty ? "无" : codes.join(", ")}');
+    return codes;
+  }
+
+  /// 读取永久故障码（Mode 0A）：清码后仍保留，直到 ECU 自检通过。
+  Future<List<String>> readPermanentDtcs() async {
+    if (!_connected) return const [];
+    final r = await _sendCmd('0A', expectMarker: '4A', timeoutMs: 1500);
+    if (!r.hasData) return const [];
+    final codes = DeepDiagnosticCodec.parseCodes(r.text, '4A');
+    _log('永久 DTC：${codes.isEmpty ? "无" : codes.join(", ")}');
+    return codes;
+  }
+
+  /// 读取排放就绪状态（Mode 01 PID 01）。
+  Future<ReadinessReport?> readReadiness() async {
+    if (!_connected) return null;
+    final r = await _sendCmd('01 01', expectMarker: '4101', timeoutMs: 1500);
+    if (!r.hasData) return null;
+    return DeepDiagnosticCodec.parseReadiness(r.text);
+  }
+
+  /// 读取冻结帧（Mode 02）：触发故障码那一刻的工况快照。
   ///
+  /// 只读 16 个通用 PID；ECU 不支持时返回字段为空的 [FreezeFrame]。
+  Future<FreezeFrame?> readFreezeFrame() async {
+    if (!_connected) return null;
+    final dtcRes = await _sendCmd('02 02 00',
+        expectMarker: '4202', timeoutMs: 1500);
+    final dtc = dtcRes.hasData
+        ? DeepDiagnosticCodec.parseFreezeDtc(dtcRes.text)
+        : null;
+    final fields = <FreezeFrameField>[];
+    for (final pid in DeepDiagnosticCodec.freezePids.keys) {
+      final hex = pid.toRadixString(16).toUpperCase().padLeft(2, '0');
+      final r = await _sendCmd('02 $hex 00',
+          expectMarker: '42$hex', timeoutMs: 900);
+      if (!r.hasData) continue;
+      final f = DeepDiagnosticCodec.parseFreezePid(r.text, pid);
+      if (f != null) fields.add(f);
+    }
+    if (dtc == null && fields.isEmpty) return null;
+    _log('冻结帧：DTC=${dtc ?? "无"}，字段 ${fields.length} 项');
+    return FreezeFrame(dtc: dtc, fields: fields);
+  }
+
+  /// 清除故障码（Mode 04）：发 "04" → 等 OK → 重读 Mode 03。
   /// 调用方必须先做用户二次确认（MIL 故障灯熄灭 ≠ 故障修复）。
   /// 仅在 [isConnected] 且非高负荷时调用（本方法不判断车速/转速，由 UI 把关）。
   Future<ClearDtcResult> clearDtcs() async {

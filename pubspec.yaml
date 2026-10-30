@@ -1,7 +1,7 @@
 name: obd_dashboard
 description: REV — 车机 OBD 实时仪表盘（十套皮肤 · 账号体系 · 车队看板 · 马力曲线/电池健康/故障码/圈速/多页面/前台保活）
 publish_to: "none"
-version: 2.16.1+52
+version: 2.16.2+53
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -47,7 +47,6 @@ dependencies:
 
   # 云端上报的设备/会话 ID
   uuid: ^4.5.1
-
 dev_dependencies:
   flutter_lints: ^3.0.0
   flutter_test:

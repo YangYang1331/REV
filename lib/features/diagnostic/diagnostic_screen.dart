@@ -5,6 +5,7 @@ import 'package:obd_dashboard/core/diagnostic/dtc_database.dart';
 import 'package:obd_dashboard/core/skin/skin_provider.dart';
 import 'package:obd_dashboard/data/obd_providers.dart';
 import 'package:obd_dashboard/features/diagnostic/data_stream_screen.dart';
+import 'package:obd_dashboard/features/diagnostic/deep_diagnostic_screen.dart';
 import 'package:obd_dashboard/services/obd_service.dart';
 
 class DiagnosticScreen extends ConsumerStatefulWidget {
@@ -139,6 +140,16 @@ class _DiagnosticScreenState extends ConsumerState<DiagnosticScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text('诊断 / 故障码'),
+        actions: [
+          IconButton(
+            tooltip: '深度诊断（就绪 / 待定码 / 冻结帧）',
+            icon: const Icon(Icons.troubleshoot),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const DeepDiagnosticScreen())),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

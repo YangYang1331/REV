@@ -35,6 +35,7 @@ import 'package:obd_dashboard/services/engine_sound_service.dart';
 import 'package:obd_dashboard/services/auto_connect.dart';
 import 'package:obd_dashboard/services/sound_service.dart';
 import 'package:obd_dashboard/features/diagnostic/diagnostic_screen.dart';
+import 'package:obd_dashboard/features/diagnostic/deep_diagnostic_screen.dart';
 import 'package:obd_dashboard/features/health/battery_health_screen.dart';
 import 'package:obd_dashboard/features/perf/perf_screen.dart';
 import 'package:obd_dashboard/features/settings/settings_screen.dart';
@@ -181,6 +182,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     _menuHeader('诊断与养护'),
                     _menuTile(Icons.build, '诊断 / 故障码', 'DTC 读取 / 维修建议',
                         () => const DiagnosticScreen()),
+                    _menuTile(Icons.troubleshoot, '深度诊断',
+                        '排放就绪 / 待定码 / 永久码 / 冻结帧 / PDF 报告',
+                        () => const DeepDiagnosticScreen()),
                     _menuTile(Icons.battery_charging_full, '电池健康',
                         '启动压降 / 充电检测', () => const BatteryHealthScreen()),
                     _menuTile(Icons.favorite_outline, '健康报告', '电池 / 温度 / 故障码评分',

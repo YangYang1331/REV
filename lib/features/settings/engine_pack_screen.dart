@@ -54,6 +54,8 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
     } else {
       tags.add(p.id.startsWith('video_') ? '视频采样' : '真实录音');
     }
+    final prof = p.profileId == null ? null : EngineProfile.byId(p.profileId!);
+    if (prof != null && prof.valveOpenRpm > 0) tags.add('阀门排气');
     if (p.turbo) tags.add('涡轮');
     if (p.supercharged) tags.add('机增');
     if (p.hasPop) tags.add('放炮');
@@ -76,7 +78,8 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
           setState(() => _selected = v);
           // ignore: discarded_futures
           EngineSoundService.instance.selectPack(v);
-          if (!p.synthOnly) {
+          // 采样包与「固定档案」的合成预设都能试听；只有可调合成引擎没有。
+          if (!p.synthOnly || p.profileId != null) {
             // ignore: discarded_futures
             EngineSoundService.instance.previewPack(v);
           }

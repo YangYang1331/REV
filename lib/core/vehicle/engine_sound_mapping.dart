@@ -151,6 +151,16 @@ class EngineSoundMapper {
     final hiTilt = 0.82 + 0.40 * loadN + 0.22 * _tipIn - 0.25 * lug;
     final loTilt = 1.0 + 0.26 * lug - 0.05 * loadN;
 
+    // 电子阀门排气（领克 03+ 等）：约 3000rpm 开阀。开阀前高阶泛音被
+    // 消音器压住、总电平也低一档；开阀后一起放出来。过渡带 ±350rpm，
+    // 用 smoothstep 避免开关瞬间的台阶（会听成「咔」一下）。
+    final vOpen = profile.valveOpenRpm;
+    var valve = 1.0;
+    if (vOpen > 0) {
+      final raw = ((_smoothRpm - (vOpen - 350.0)) / 700.0).clamp(0.0, 1.0);
+      valve = raw * raw * (3.0 - 2.0 * raw);
+    }
+
     final harmonics = <double, double>{};
     for (final order in kEngineOrders) {
       final idleW = profile.idleWeights[order] ?? 0.0;
@@ -158,6 +168,7 @@ class EngineSoundMapper {
       var g = idleW + (highW - idleW) * t;
       g *= order < 2.0 ? loTilt : hiTilt;
       g *= _tuning.lowOrderScale(order) * _tuning.highOrderScale(order);
+      if (vOpen > 0 && order >= 3.0) g *= 0.55 + 0.45 * valve;
       harmonics[order] = g.clamp(0.0, 1.2);
     }
 
@@ -181,7 +192,8 @@ class EngineSoundMapper {
     final master = (0.55 + 0.20 * t) *
         (1.0 - _coastDip) *
         (0.94 + 0.14 * loadN) *
-        (1.0 + 0.08 * _tipIn);
+        (1.0 + 0.08 * _tipIn) *
+        (0.86 + 0.14 * valve);
 
     // 10) 母线低通：排气脉冲的高频含量随负荷与转速抬升。
     final busCutoff =

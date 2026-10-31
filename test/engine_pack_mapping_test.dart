@@ -174,6 +174,22 @@ void main() {
     // v2.17.7 新增字段的默认值。
     expect(p.core, 'idle');
     expect(p.toneHz, 9000);
+    expect(p.profileId, isNull);
+  });
+
+  test('manifest.fromJson 解析固定档案预设（领克 03+）', () {
+    final p = EnginePackManifest.fromJson(const {
+      'id': 'lynk_03',
+      'name': '领克 03+ 2.0T',
+      'turbo': true,
+      'synthOnly': true,
+      'bands': [],
+      'profile': 'lynk03',
+    });
+    expect(p.synthOnly, true);
+    expect(p.profileId, 'lynk03');
+    // 带档案的合成预设按动力属性归组，而不是塞进「合成引擎（可调）」。
+    expect(enginePackGroup(p), EnginePackGroup.turbo);
   });
 
   group('核心循环变调曲线（v2.17.7）', () {

@@ -20,6 +20,7 @@ class EnginePackManifest {
     this.synthOnly = false,
     this.core = 'idle',
     this.toneHz = 9000,
+    this.profileId,
   });
 
   final String id;
@@ -49,6 +50,10 @@ class EnginePackManifest {
   /// 采样音色低通截止（Hz）：录音本身的高频嘶声/风噪在这里收掉。
   final double toneHz;
 
+  /// 固定引擎档案（v2.17.8）：选中该包时把合成档案切到它。
+  /// 只用于「实时合成」类的整车预设（如领克 03+），采样包为 null。
+  final String? profileId;
+
   static EnginePackManifest fromJson(Map<String, dynamic> j) =>
       EnginePackManifest(
         id: j['id']?.toString() ?? '',
@@ -66,6 +71,9 @@ class EnginePackManifest {
             ? j['core'].toString()
             : 'idle',
         toneHz: (j['toneHz'] as num?)?.toDouble() ?? 9000,
+        profileId: (j['profile']?.toString().trim().isNotEmpty ?? false)
+            ? j['profile'].toString().trim()
+            : null,
       );
 }
 
@@ -302,7 +310,10 @@ EnginePackManifest resolveEnginePack(
 enum EnginePackGroup { na, turbo, supercharged, rotary, synth }
 
 EnginePackGroup enginePackGroup(EnginePackManifest p) {
-  if (p.synthOnly || p.id == 'synth') return EnginePackGroup.synth;
+  // 固定档案的合成预设（如领克 03+）按动力属性归组，其余 synthOnly 归合成组。
+  if (p.id == 'synth' || (p.synthOnly && p.profileId == null)) {
+    return EnginePackGroup.synth;
+  }
   if (p.supercharged) return EnginePackGroup.supercharged;
   if (p.id.contains('rotary')) return EnginePackGroup.rotary;
   if (p.turbo) return EnginePackGroup.turbo;

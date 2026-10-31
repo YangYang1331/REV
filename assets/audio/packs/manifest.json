@@ -131,6 +131,19 @@
       "toneHz": 6800
     },
     {
+      "id": "lynk_03",
+      "name": "领克 03+ 2.0T",
+      "turbo": true,
+      "supercharged": false,
+      "bands": [],
+      "hasPop": true,
+      "hasBlowoff": true,
+      "hasWhine": false,
+      "synthOnly": true,
+      "core": "idle",
+      "profile": "lynk03"
+    },
+    {
       "id": "porsche_gt3",
       "name": "保时捷 911 GT3",
       "turbo": false,

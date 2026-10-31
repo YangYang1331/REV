@@ -42,6 +42,7 @@ void main() {
       expect(EngineProfile.forPack('porsche_gt3').id, 'h6');
       expect(EngineProfile.forPack('mazda_rotary').id, 'rotary');
       expect(EngineProfile.forPack('mazda6_na').id, 'i4');
+      expect(EngineProfile.forPack('lynk_03').id, 'lynk03');
     });
   });
 
@@ -118,6 +119,31 @@ void main() {
           tuning: const EngineTuning(lowEnd: 1.5));
       expect(thick.harmonicGains[1.0]!, greaterThan(base.harmonicGains[1.0]!));
       expect(thick.harmonicGains[6.0]!, closeTo(base.harmonicGains[6.0]!, 1e-9));
+    });
+
+    test('阀门排气：开阀前总电平低一档，开阀后恢复', () {
+      final p = EngineProfile.lynk03;
+      expect(p.valveOpenRpm, greaterThan(0));
+      expect(EngineProfile.i4.valveOpenRpm, 0);
+
+      EngineSoundParams stableOf(EngineProfile prof, double rpm) {
+        final m = EngineSoundMapper(
+            idleRpm: 800, redlineRpm: 6500, profile: prof);
+        for (var i = 0; i < 160; i++) {
+          m.plan(rpm, 50);
+        }
+        return m.plan(rpm, 50);
+      }
+
+      // 2200rpm 阀关：总电平被压到无阀门档案的 ~86%。
+      final i4Low = stableOf(EngineProfile.i4, 2200);
+      final closed = stableOf(p, 2200);
+      expect(closed.masterGain, lessThan(i4Low.masterGain * 0.95));
+
+      // 3800rpm 已完全开阀：总电平与无阀门档案一致。
+      final i4High = stableOf(EngineProfile.i4, 3800);
+      final open = stableOf(p, 3800);
+      expect(open.masterGain, closeTo(i4High.masterGain, 1e-9));
     });
 
     test('踩油瞬态抬总增益，颗粒量随调音变化', () {

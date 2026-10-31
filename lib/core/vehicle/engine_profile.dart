@@ -35,6 +35,7 @@ class EngineProfile {
     this.roughness = 0.5,
     this.hasPop = true,
     this.hasBlowoff = false,
+    this.valveOpenRpm = 0,
     this.note = '',
   });
 
@@ -64,6 +65,12 @@ class EngineProfile {
   final bool hasPop;
   final bool hasBlowoff;
 
+  /// 电子阀门排气开启转速（0 = 无阀门）。
+  ///
+  /// 领克 03+ 这类原厂阀门排气在约 3000rpm 打开：阀门前排气被消音器压住，
+  /// 高阶泛音少、整体偏闷；开阀后高阶与总电平一起放出来。见 plan() 的阀值塑形。
+  final double valveOpenRpm;
+
   /// 选择页副标题。
   final String note;
 
@@ -91,6 +98,7 @@ class EngineProfile {
         'subaru_sti' => h4,
         'porsche_gt3' || 'porsche_turbo' => h6,
         'mazda_rotary' || 'video_rx8_rotary' => rotary,
+        'lynk_03' => lynk03,
         _ => i4,
       };
 
@@ -273,8 +281,36 @@ class EngineProfile {
     note: '连续旋转燃烧，持续啸叫',
   );
 
+  /// 领克 03+ 2.0T（Drive-E 四缸涡轮 + 原厂电子阀门排气）。
+  ///
+  /// 参考实车特性：双边双出打孔尾喉、约 3000rpm 开阀；关闭时低频占主导、
+  /// 声音「厚而不炸」，开阀后中高频一起放出来，收油有回火。四冲程四缸，
+  /// 每转点火 2 次，因此半阶/1 阶权重偏高形成厚度，6/8 阶低于性能 V8。
+  static final EngineProfile lynk03 = EngineProfile(
+    id: 'lynk03',
+    name: '领克 03+ 2.0T',
+    cylinders: 4,
+    pulsesPerRev: 2,
+    layout: EngineLayout.inline,
+    idleWeights: {
+      0.5: 0.62, 1.0: 0.98, 2.0: 0.72, 3.0: 0.30,
+      4.0: 0.22, 6.0: 0.12, 8.0: 0.06,
+    },
+    highWeights: {
+      0.5: 0.26, 1.0: 0.72, 2.0: 0.90, 3.0: 0.72,
+      4.0: 0.44, 6.0: 0.28, 8.0: 0.16,
+    },
+    noiseIdle: 0.11,
+    noiseHigh: 0.40,
+    roughness: 0.45,
+    hasPop: true,
+    hasBlowoff: true,
+    valveOpenRpm: 3000,
+    note: '原厂阀门排气，低速厚、3000 转开阀',
+  );
+
   static final List<EngineProfile> all = [
-    i4, i6, v6, v8, v10, v12, h4, h6, rotary,
+    i4, i6, v6, v8, v10, v12, h4, h6, rotary, lynk03,
   ];
 }
 

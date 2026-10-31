@@ -908,6 +908,20 @@ const handler = async (req, res) => {
       sourceUrl: `${base}/download/REV-Flutter-source.zip?v=${LATEST.versionCode}`,
     });
   }
+  if (url.pathname === '/api/v1/artifacts') {
+    const seen = new Set();
+    const files = [];
+    for (const spec of DOWNLOADS.values()) {
+      if (seen.has(spec.file)) continue;
+      seen.add(spec.file);
+      try {
+        files.push({ file: spec.file, bytes: fs.statSync(path.join(__dirname, 'download', spec.file)).size });
+      } catch (e) {
+        files.push({ file: spec.file, bytes: null });
+      }
+    }
+    return send(200, { ok: true, files }, 'application/json; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  }
   if (url.pathname.startsWith('/download/')) {
     const spec = DOWNLOADS.get(url.pathname);
     if (!spec) return send(404, { ok: false, error: 'not found' });

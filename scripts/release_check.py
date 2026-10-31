@@ -23,8 +23,8 @@ AAPT = f"{BT}/aapt"
 APKSIGNER = f"{BT}/apksigner"
 ZIPALIGN = f"{BT}/zipalign"
 
-EXPECT_VCODE = 55
-EXPECT_VNAME = "2.17.1"
+EXPECT_VCODE = 56
+EXPECT_VNAME = "2.17.2"
 EXPECT_PKG = "com.rev.cluster"
 EXPECT_MINSdk = 24
 EXPECT_CERT_PREFIX = "3f16feb"

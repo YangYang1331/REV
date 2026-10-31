@@ -112,13 +112,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     return Offset(math.sin(s * 55) * 4 * env, math.cos(s * 47) * 3 * env);
   }
 
-  /// 主方表指针：0.35–1.15 扫到红线，1.35–2.10 回落。
+  /// 主方表指针：0.35–1.15 扫到红线，1.35–2.10 回落；2.1s 后怠速微抖。
   double get _needleP {
-    if (s < 0.35) return 0;
-    if (s < 1.15) return Curves.easeOutBack.transform((s - 0.35) / 0.80);
-    if (s < 1.35) return 1.0;
-    if (s < 2.10) return 1.0 - Curves.easeInOut.transform((s - 1.35) / 0.75);
-    return 0.0;
+    double base;
+    if (s < 0.35) {
+      base = 0;
+    } else if (s < 1.15) {
+      base = Curves.easeOutBack.transform((s - 0.35) / 0.80);
+    } else if (s < 1.35) {
+      base = 1.0;
+    } else if (s < 2.10) {
+      base = 1.0 - Curves.easeInOut.transform((s - 1.35) / 0.75);
+    } else {
+      // 点火后进入怠速：指针停在最低刻度并轻微抖动（发动机活着的感觉）。
+      final idle = 0.05 + 0.045 * math.sin((s - 2.10) * 10.5);
+      return (0.006 * idle.clamp(0.0, 1.0)).clamp(0.0, 0.02);
+    }
+    return base;
   }
 
   /// cyan 背光亮度：0.35 起，1.30 到全亮，点火后保持。
@@ -147,6 +157,35 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   double get _camRot => _fx ? 0.045 * math.sin(math.pi * _camP) : 0.0; // ≈2.6° 扫过
+
+  /// 镜头推拉：开场 1.28 → 1.00 的推近转拉远，收尾再轻推 1.05（蓄势进主页）。
+  double get _camZoom {
+    final intro = (1 -
+            Curves.easeOutCubic
+                .transform(((s - 0.12) / 1.15).clamp(0.0, 1.0)))
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final outro = Curves.easeInOut
+        .transform(((s - 2.90) / 0.55).clamp(0.0, 1.0))
+        .clamp(0.0, 1.0)
+        .toDouble();
+    return 1.0 + 0.30 * intro + 0.055 * outro;
+  }
+
+  /// 透视镜头矩阵：平移 + 绕 X/Y/Z 轻转 + 推拉，做出 3D 扫过感。
+  /// 平移放在最外层，保证抖动/位移仍按屏幕坐标走。
+  Matrix4 get _camMatrix {
+    final p = Curves.easeInOut.transform(_camP);
+    final ry = _fx ? 0.105 * math.sin(math.pi * p) : 0.0; // ≈6°
+    final rx = _fx ? -0.032 * math.sin(math.pi * p) : 0.0;
+    return Matrix4.identity()
+      ..setEntry(3, 2, 0.0014)
+      ..translate(_camPan.dx, _camPan.dy)
+      ..rotateX(rx)
+      ..rotateY(ry)
+      ..rotateZ(_camRot)
+      ..scale(_camZoom);
+  }
 
   double get _speedIntensity {
     if (s < 0.35) return 0;
@@ -281,23 +320,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             child: Stack(
               fit: StackFit.expand,
               children: [
+                // 透视网格地面（Tron 感）：镜头拉开时从地平线扑面而来。
+                Positioned.fill(
+                    child: CustomPaint(painter: _GridFloorPainter(s, _fx))),
                 Positioned.fill(
                     child: CustomPaint(painter: _CenterGlowPainter(s))),
+                // 点火冲击波：两圈从表心扩散。
+                Positioned.fill(
+                    child: CustomPaint(painter: _ShockwavePainter(s))),
                 Positioned.fill(child: CustomPaint(painter: _HudScanPainter(s))),
                 Positioned.fill(
                     child: CustomPaint(
                         painter: _SpeedLinesPainter(s, _speedIntensity))),
                 Positioned.fill(child: CustomPaint(painter: _SparksPainter(s))),
                 Positioned.fill(child: CustomPaint(painter: _StreakPainter(s))),
-                // 整组仪表 + 标题：镜头 pan + rotate 扫过
+                // 整组仪表 + 标题：3D 透视镜头（平移 + 绕 Z/Y 轻转 + 推拉）。
                 Center(
                   child: Transform(
                     alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..translate(_camPan.dx, _camPan.dy)
-                      ..rotateZ(_camRot),
+                    transform: _camMatrix,
                     child: _clusterContent(),
                   ),
+                ),
+                // HUD 四角框 + 准星：开场收拢、结尾再夹紧，收尾进主页。
+                Positioned.fill(
+                    child: IgnorePointer(
+                        child: CustomPaint(painter: _HudFramePainter(s))),
                 ),
                 if (_flash > 0.01)
                   Positioned.fill(
@@ -614,18 +662,44 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Widget _subtitle() {
-    final t = ((s - 1.9) / 0.4).clamp(0.0, 1.0).toDouble();
-    return Opacity(
-      opacity: t,
-      child: Text(
-        'OBD REAL-TIME CLUSTER',
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.75),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 2 + 8 * t,
+    const full = 'OBD REAL-TIME CLUSTER';
+    final t = ((s - 1.9) / 0.9).clamp(0.0, 1.0).toDouble();
+    final n = (full.length * Curves.easeOut.transform(t)).floor();
+    final typing = n < full.length;
+    final cursorOn = (s * 5).floor().isEven;
+    final ready = ((s - 2.55) / 0.35).clamp(0.0, 1.0).toDouble();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Opacity(
+          opacity: t,
+          child: Text(
+            '${full.substring(0, n)}${typing && cursorOn ? '▌' : ''}',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.75),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 2 + 8 * t,
+            ),
+          ),
         ),
-      ),
+        if (ready > 0.01)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Opacity(
+              opacity: ready,
+              child: Text(
+                'SYSTEM READY // 26 ENGINE SAMPLES',
+                style: TextStyle(
+                  color: const Color(0xFF27D6E6).withOpacity(0.85 * ready),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 3,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1030,3 +1104,157 @@ class _GaugePainter extends CustomPainter {
   bool shouldRepaint(_GaugePainter old) =>
       old.p != p || old.backlight != backlight;
 }
+
+/// 透视网格地面（Tron 语言）：射线向地平线汇聚，横向流速线带近大远小
+/// 加速滚来。只在地平线层开启时绘制，随开场淡入、冲刺前淡出。
+class _GridFloorPainter extends CustomPainter {
+  _GridFloorPainter(this.s, this.enabled);
+  final double s;
+  final bool enabled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!enabled || size.shortestSide <= 0) return;
+    final fadeIn = ((s - 0.20) / 0.55).clamp(0.0, 1.0).toDouble();
+    final fadeOut =
+        s < 2.95 ? 1.0 : (1 - (s - 2.95) / 0.65).clamp(0.0, 1.0).toDouble();
+    final a = 0.22 * fadeIn * fadeOut;
+    if (a <= 0.01) return;
+
+    final vp = Offset(size.width * 0.5, size.height * 0.44);
+    final bottom = size.height;
+
+    // 汇聚射线
+    final ray = Paint()
+      ..color = const Color(0xFF27D6E6).withOpacity(a * 0.85)
+      ..strokeWidth = 1.0;
+    for (var i = -9; i <= 9; i++) {
+      final x = size.width * 0.5 + i * size.width * 0.115;
+      canvas.drawLine(vp, Offset(x, bottom), ray);
+    }
+
+    // 横向流速线：t² 做近大远小，随 s 向下滚动
+    for (var i = 0; i < 7; i++) {
+      final t = ((i / 7) + s * 0.16) % 1.0;
+      final y = vp.dy + (bottom - vp.dy) * t * t;
+      final half = size.width * (0.03 + 1.05 * t * t);
+      canvas.drawLine(
+        Offset(size.width * 0.5 - half, y),
+        Offset(size.width * 0.5 + half, y),
+        Paint()
+          ..color = const Color(0xFF27D6E6)
+              .withOpacity((0.25 + 0.75 * t) * a)
+          ..strokeWidth = 0.6 + 1.6 * t,
+      );
+    }
+
+    // 地平线辉光带
+    final horizon = Rect.fromCenter(
+        center: vp, width: size.width * 0.9, height: size.height * 0.10);
+    canvas.drawRect(
+      horizon,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Color(0x8827D6E6),
+            Colors.transparent,
+          ],
+        ).createShader(horizon),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GridFloorPainter old) =>
+      old.s != s || old.enabled != enabled;
+}
+
+/// 点火冲击波：两圈从表心扩散的青色/白色环，配合白闪与火花。
+class _ShockwavePainter extends CustomPainter {
+  _ShockwavePainter(this.s);
+  final double s;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (s < 1.02 || s > 2.05 || size.shortestSide <= 0) return;
+    final c = Offset(size.width * 0.5, size.height * 0.42);
+    for (var i = 0; i < 2; i++) {
+      final t = (s - 1.02 - i * 0.13) / 0.70;
+      if (t <= 0 || t >= 1) continue;
+      final r = size.shortestSide * (0.12 + 0.62 * Curves.easeOutCubic.transform(t));
+      final a = (1 - t) * (0.55 - i * 0.18);
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0 * (1 - t) + 0.6
+          ..color = const Color(0xFF7FF0E6).withOpacity(a),
+      );
+      canvas.drawCircle(
+        c,
+        r * 0.94,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..color = Colors.white.withOpacity(a * 0.45),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShockwavePainter old) => old.s != s;
+}
+
+/// HUD 边框：四角 L 形描边 + 中央准星，开场从外收拢、结尾再夹紧后淡出。
+class _HudFramePainter extends CustomPainter {
+  _HudFramePainter(this.s);
+  final double s;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.shortestSide <= 0) return;
+    final enter = ((s - 0.10) / 0.45).clamp(0.0, 1.0).toDouble();
+    final close = ((s - 2.95) / 0.50).clamp(0.0, 1.0).toDouble();
+    final out = s > 3.50
+        ? (1 - (s - 3.50) / 0.28).clamp(0.0, 1.0).toDouble()
+        : 1.0;
+    final a = 0.30 * enter * out;
+    if (a <= 0.01) return;
+
+    final e = Curves.easeOutCubic.transform(enter);
+    final c2 = Curves.easeInOut.transform(close);
+    final inset = size.shortestSide * 0.035 + (1 - e) * 30 - c2 * 6;
+    final len = size.shortestSide * 0.06;
+    final p = Paint()
+      ..color = const Color(0xFF27D6E6).withOpacity(a)
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+
+    void corner(Offset o, double sx, double sy) {
+      canvas.drawLine(o, o + Offset(len * sx, 0), p);
+      canvas.drawLine(o, o + Offset(0, len * sy), p);
+    }
+
+    corner(Offset(inset, inset), 1, 1);
+    corner(Offset(size.width - inset, inset), -1, 1);
+    corner(Offset(inset, size.height - inset), 1, -1);
+    corner(Offset(size.width - inset, size.height - inset), -1, -1);
+
+    final mid = size.width * 0.5;
+    final tick = size.shortestSide * 0.018;
+    canvas.drawLine(Offset(mid, inset), Offset(mid, inset + tick), p);
+    canvas.drawLine(
+        Offset(mid, size.height - inset), Offset(mid, size.height - inset - tick), p);
+    canvas.drawLine(Offset(inset, size.height * 0.5),
+        Offset(inset + tick * 0.7, size.height * 0.5), p);
+    canvas.drawLine(Offset(size.width - inset, size.height * 0.5),
+        Offset(size.width - inset - tick * 0.7, size.height * 0.5), p);
+  }
+
+  @override
+  bool shouldRepaint(_HudFramePainter old) => old.s != s;
+}
+

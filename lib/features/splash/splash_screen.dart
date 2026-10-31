@@ -198,8 +198,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   double get _flash {
     if (s < 3.55) return 0;
-    if (s < 3.68) return (s - 3.55) / 0.13 * 0.8;
-    if (s < 3.80) return 0.8 * (1 - (s - 3.68) / 0.12);
+    if (s < 3.68) return (s - 3.55) / 0.13 * 0.55;
+    if (s < 3.80) return 0.55 * (1 - (s - 3.68) / 0.12);
     return 0;
   }
 
@@ -582,26 +582,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Widget _revTitle(double size) {
-    return Stack(
-      alignment: Alignment.center,
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            for (var i = 0; i < 3; i++) _revLetter('REV'[i], i, size),
-          ],
-        ),
-        // 橙色光带从左到右横扫白色粗体字
-        if (_fx && s > 1.95 && s < 2.60)
-          Positioned.fill(
-            child: ClipRect(
-              child: CustomPaint(
-                  painter: _TitleBandPainter(
-                      ((s - 1.95) / 0.65).clamp(0.0, 1.0).toDouble())),
-            ),
-          ),
+        for (var i = 0; i < 3; i++) _revLetter('REV'[i], i, size),
       ],
+    );
+    // 橙色高光从左到右扫过字形（ShaderMask 只作用于字母本身）。
+    if (!_fx || s <= 1.95 || s >= 2.60) return row;
+    final p = ((s - 1.95) / 0.65).clamp(0.0, 1.0).toDouble();
+    return ShaderMask(
+      blendMode: BlendMode.srcATop,
+      shaderCallback: (rect) {
+        final x = rect.left - rect.width * 0.2 + p * rect.width * 1.4;
+        final band = Rect.fromLTWH(
+            x - rect.width * 0.09, rect.top, rect.width * 0.18, rect.height);
+        return const LinearGradient(
+          colors: [
+            Colors.transparent,
+            Color(0xFFFFB347),
+            Color(0xFFFFF3DA),
+            Color(0xFFFFB347),
+            Colors.transparent,
+          ],
+          stops: [0.0, 0.35, 0.5, 0.65, 1.0],
+        ).createShader(band);
+      },
+      child: row,
     );
   }
 
@@ -717,32 +725,6 @@ class _WarnLightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WarnLightPainter old) => old.on != on;
-}
-
-/// 标题橙色横扫光带：一道窄的橙色/暖白光带从左到右掠过 REV 白字。
-class _TitleBandPainter extends CustomPainter {
-  _TitleBandPainter(this.p);
-  final double p; // 0..1
-  @override
-  void paint(Canvas canvas, Size size) {
-    final x = -size.width * 0.2 + p * size.width * 1.4;
-    final rect = Rect.fromLTWH(x - size.width * 0.08, 0,
-        size.width * 0.16, size.height);
-    final shader = const LinearGradient(
-      colors: [
-        Colors.transparent,
-        Color(0xFFFFB347),
-        Color(0xFFFFE9C0),
-        Color(0xFFFFB347),
-        Colors.transparent,
-      ],
-      stops: [0.0, 0.35, 0.5, 0.65, 1.0],
-    ).createShader(rect);
-    canvas.drawRect(rect, Paint()..shader = shader);
-  }
-
-  @override
-  bool shouldRepaint(_TitleBandPainter old) => old.p != p;
 }
 
 /// 中心点火辉光。

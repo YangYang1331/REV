@@ -1,10 +1,16 @@
-# REV — 车机 OBD 实时仪表盘（v2.17.2）
+# REV — 车机 OBD 实时仪表盘（v2.17.3）
 
 十套皮肤 · 26 套真实引擎采样声浪 · 账号体系与车队看板 · DTC 中文故障码 · 马力曲线 / 电池健康 / 圈速 / 前台保活。
-包名 `com.rev.cluster`，versionCode 56 / versionName 2.17.2。
+包名 `com.rev.cluster`，versionCode 57 / versionName 2.17.3。
 
 > 开源版默认不内置任何服务器地址（不连作者服务器）。请在设置里填写你自己部署的服务器地址，
 > 或用 `--dart-define=DEFAULT_BASE=... --dart-define=DEFAULT_ENDPOINT=...` 注入；详见 `OPENSOURCE_DEPLOY.md`。
+
+## v2.17.3 主要变更（开屏观感修正）
+
+- **标题高光**：`REV` 的橙色横扫光带改用 `ShaderMask`，只掠过字形本身，不再出现"色条盖住字母"的方块感。
+- **收尾白闪减半**：闪白峰值从 0.80 降到 0.55，夜间/地库上车更不刺眼。
+- 其余动画节奏、4.0s 总时长、9s 硬上限与开关逻辑均未改动。
 
 ## v2.17.2 主要变更（开屏动画升级）
 

@@ -11,8 +11,8 @@ class AppEnvironment {
   static const String appName = 'OBD 仪表盘';
 
   /// 版本（与 pubspec.yaml 保持一致，发版时同步修改）
-  static const String version = '2.17.2';
-  static const int versionCode = 56;
+  static const String version = '2.17.3';
+  static const int versionCode = 57;
 
   /// 默认数据源模式：'offline' 离线模拟 / 'ble' 真实蓝牙
   static String defaultDataSource() {

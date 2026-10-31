@@ -105,11 +105,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   // —— 各阶段曲线 ——
 
-  /// 点火瞬间镜头抖动（1.05–1.25s）。
+  /// 点火/标题/收尾白闪的镜头震动（每次一小下，避免持续抖）。
   Offset get _shake {
-    if (s < 1.05 || s > 1.25) return Offset.zero;
-    final env = math.sin(math.pi * (s - 1.05) / 0.20);
-    return Offset(math.sin(s * 55) * 4 * env, math.cos(s * 47) * 3 * env);
+    double x = 0;
+    double y = 0;
+    if (s >= 1.05 && s <= 1.25) {
+      final env = math.sin(math.pi * (s - 1.05) / 0.20);
+      x += math.sin(s * 55) * 4 * env;
+      y += math.cos(s * 47) * 3 * env;
+    }
+    // 标题落位重音：极短、幅度小，只做“落锤”感。
+    if (s >= 1.50 && s <= 1.66) {
+      final env = math.sin(math.pi * (s - 1.50) / 0.16);
+      x += math.sin(s * 70) * 2.2 * env;
+      y += math.cos(s * 63) * 1.6 * env;
+    }
+    // 收尾白闪冲击。
+    if (s >= 3.53 && s <= 3.67) {
+      final env = math.sin(math.pi * (s - 3.53) / 0.14);
+      x += math.sin(s * 80) * 2.8 * env;
+      y += math.cos(s * 74) * 2.0 * env;
+    }
+    return Offset(x, y);
   }
 
   /// 主方表指针：0.35–1.15 扫到红线，1.35–2.10 回落；2.1s 后怠速微抖。
@@ -189,11 +206,25 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   double get _speedIntensity {
     if (s < 0.35) return 0;
-    if (s < 1.05) return 0.5 * ((s - 0.35) / 0.70);
-    if (s < 1.35) return 0.5 + 0.5 * ((s - 1.05) / 0.30);
-    if (s < 2.10) return 1.0 - 0.6 * ((s - 1.35) / 0.75);
-    if (s < 3.30) return 0.4 + 0.5 * ((s - 2.10) / 1.20);
-    return 0.9;
+    double v;
+    if (s < 1.05) {
+      v = 0.5 * ((s - 0.35) / 0.70);
+    } else if (s < 1.35) {
+      v = 0.5 + 0.5 * ((s - 1.05) / 0.30);
+    } else if (s < 2.10) {
+      v = 1.0 - 0.6 * ((s - 1.35) / 0.75);
+    } else if (s < 3.30) {
+      v = 0.4 + 0.5 * ((s - 2.10) / 1.20);
+    } else {
+      // 收尾冲刺：随白闪逼近再顶一下。
+      final q = ((s - 3.30) / 0.30).clamp(0.0, 1.0).toDouble();
+      v = 0.9 + 0.12 * Curves.easeIn.transform(q);
+    }
+    // 标题落位瞬间的速度线脉冲（与重音/光带同步）。
+    if (s >= 1.48 && s <= 1.72) {
+      v += 0.16 * math.sin(math.pi * (s - 1.48) / 0.24);
+    }
+    return v.clamp(0.0, 1.0).toDouble();
   }
 
   double get _flash {
@@ -223,6 +254,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) => _goHome());
       return;
     }
+    // 原创氛围音轨：与画面同一 4.0s 时间轴（点火轰鸣另走一路播放器）。
+    try {
+      unawaited(SoundService.instance.playSplashBed());
+    } catch (_) {}
     // 动画正常 4.0s 播完即导航；这里垫到 4.4s 做"停滞兜底"。
     _hardTimer = Timer(SplashScreen.maxHold, _goHome);
     try {
@@ -254,6 +289,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     try {
       _c.stop();
     } catch (_) {}
+    try {
+      unawaited(SoundService.instance.stopSplashBed());
+    } catch (_) {}
     // 首次启动（或隐私条款版本更新）先过隐私授权页：数据去向/退出方式必须明示并主动同意。
     var accepted = false;
     try {
@@ -276,6 +314,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   void dispose() {
     _absTimer?.cancel();
     _hardTimer?.cancel();
+    try {
+      unawaited(SoundService.instance.stopSplashBed());
+    } catch (_) {}
     try {
       _c.removeStatusListener(_onStatus);
       _c.dispose();
@@ -334,6 +375,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         painter: _SpeedLinesPainter(s, _speedIntensity))),
                 Positioned.fill(child: CustomPaint(painter: _SparksPainter(s))),
                 Positioned.fill(child: CustomPaint(painter: _StreakPainter(s))),
+                // 电影感漏光/变形宽银幕光斑：标题落位时横扫，收尾再压一层。
+                Positioned.fill(
+                    child: IgnorePointer(
+                        child: CustomPaint(
+                            painter: _LightLeakPainter(s, _fx)))),
                 // 整组仪表 + 标题：3D 透视镜头（平移 + 绕 Z/Y 轻转 + 推拉）。
                 Center(
                   child: Transform(
@@ -342,6 +388,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     child: _clusterContent(),
                   ),
                 ),
+                // 标题落位时的彩纸/碎片爆点（原创粒子，向四周喷发后受重力下落）。
+                Positioned.fill(
+                    child: IgnorePointer(
+                        child: CustomPaint(
+                            painter: _ConfettiPainter(s, _fx)))),
                 // HUD 四角框 + 准星：开场收拢、结尾再夹紧，收尾进主页。
                 Positioned.fill(
                     child: IgnorePointer(
@@ -907,6 +958,175 @@ class _StreakPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_StreakPainter old) => old.s != s;
+}
+
+/// 电影感漏光/变形宽银幕光斑（FH 开场语言）：标题落位时一道暖色横光扫过，
+/// 点火与收尾各补一层极淡的镜头辉光。只在地平线层开启时绘制。
+class _LightLeakPainter extends CustomPainter {
+  _LightLeakPainter(this.s, this.enabled);
+  final double s;
+  final bool enabled;
+
+  LinearGradient _band(double a) => LinearGradient(
+        colors: [
+          Colors.transparent,
+          const Color(0xFFFF8A3D).withOpacity(a * 0.75),
+          const Color(0xFFFFE2C4).withOpacity(a),
+          const Color(0xFFFF8A3D).withOpacity(a * 0.75),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.22, 0.5, 0.78, 1.0],
+      );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!enabled || size.shortestSide <= 0) return;
+    final w = size.width;
+    final h = size.height;
+
+    // 1) 标题横扫：1.42 淡入 → 2.55 淡出，横向漂移。
+    if (s >= 1.42 && s <= 2.55) {
+      final p = Curves.easeInOut
+          .transform(((s - 1.42) / 1.13).clamp(0.0, 1.0));
+      final a = (s < 1.60
+              ? (s - 1.42) / 0.18
+              : (1 - (s - 1.60) / 0.95).clamp(0.0, 1.0)) *
+          0.26;
+      if (a > 0.005) {
+        final x = w * (0.16 + 0.68 * p);
+        final y = h * 0.655;
+        final band = Rect.fromCenter(
+            center: Offset(x, y), width: w * 1.05, height: h * 0.055);
+        canvas.drawRect(
+          band,
+          Paint()
+            ..shader = _band(a).createShader(band)
+            ..blendMode = BlendMode.plus
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+        );
+        final core = Rect.fromCenter(
+            center: Offset(x, y), width: w * 0.72, height: 1.4);
+        canvas.drawRect(
+          core,
+          Paint()
+            ..shader = _band(a * 1.1).createShader(core)
+            ..blendMode = BlendMode.plus
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+        );
+      }
+    }
+
+    // 2) 点火镜头辉光：左上暖橘 + 中心冷青，幅度极小。
+    if (s >= 1.04 && s <= 1.62) {
+      final a = math.sin(math.pi * (s - 1.04) / 0.58).clamp(0.0, 1.0);
+      if (a > 0.01) {
+        final c = Offset(w * 0.28, h * 0.18);
+        final r = size.shortestSide * 0.55;
+        final shader = RadialGradient(
+          colors: [
+            const Color(0xFFFFB27A).withOpacity(0.16 * a),
+            const Color(0xFF27D6E6).withOpacity(0.05 * a),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ).createShader(Rect.fromCircle(center: c, radius: r));
+        canvas.drawRect(Offset.zero & size,
+            Paint()..shader = shader..blendMode = BlendMode.plus);
+      }
+    }
+
+    // 3) 收尾白闪前的一层镜头泛光（压在白色闪屏之下，增加层次）。
+    if (s >= 3.46 && s <= 3.98) {
+      final a = (s < 3.56
+              ? (s - 3.46) / 0.10
+              : (1 - (s - 3.56) / 0.42).clamp(0.0, 1.0)) *
+          0.12;
+      if (a > 0.004) {
+        final c = Offset(w * 0.5, h * 0.42);
+        final r = size.shortestSide * 0.85;
+        final shader = RadialGradient(
+          colors: [
+            const Color(0xFFFFF3E2).withOpacity(a),
+            const Color(0xFFFFB347).withOpacity(a * 0.45),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.42, 1.0],
+        ).createShader(Rect.fromCircle(center: c, radius: r));
+        canvas.drawRect(Offset.zero & size,
+            Paint()..shader = shader..blendMode = BlendMode.plus);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LightLeakPainter old) =>
+      old.s != s || old.enabled != enabled;
+}
+
+/// 标题落位时的彩纸/碎片爆点：从标题中心向四周喷发，受重力下落并自旋淡出。
+/// 颜色沿用 REV 的橙/红/青/白，全部由确定性随机数生成。
+class _ConfettiPainter extends CustomPainter {
+  _ConfettiPainter(this.s, this.enabled);
+  final double s;
+  final bool enabled;
+
+  static const int _n = 46;
+  static final _rnd = math.Random(23);
+  static final List<double> _ang = List.generate(
+      _n, (_) => -math.pi / 2 + (_rnd.nextDouble() - 0.5) * 2.7);
+  static final List<double> _spd =
+      List.generate(_n, (_) => 0.14 + _rnd.nextDouble() * 0.34);
+  static final List<double> _spin =
+      List.generate(_n, (_) => (_rnd.nextDouble() - 0.5) * 9);
+  static final List<double> _delay =
+      List.generate(_n, (_) => _rnd.nextDouble() * 0.10);
+  static final List<double> _w =
+      List.generate(_n, (_) => 2.2 + _rnd.nextDouble() * 3.4);
+  static final List<double> _h =
+      List.generate(_n, (_) => 1.2 + _rnd.nextDouble() * 2.0);
+  static const List<Color> _palette = [
+    Color(0xFFFFB347),
+    Color(0xFFFF4A30),
+    Color(0xFF27D6E6),
+    Color(0xFFFFF3DA),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!enabled || size.shortestSide <= 0) return;
+    final t = (s - 1.50) / 1.25;
+    if (t < 0 || t > 1) return;
+    final origin = Offset(size.width * 0.5, size.height * 0.62);
+    final unit = size.shortestSide;
+    final p = Paint();
+    for (var i = 0; i < _n; i++) {
+      if (t < _delay[i]) continue;
+      final lt = ((t - _delay[i]) / (1 - _delay[i])).clamp(0.0, 1.0);
+      final d = Offset(math.cos(_ang[i]), math.sin(_ang[i]));
+      final travel = _spd[i] * unit * Curves.easeOut.transform(lt);
+      final pos = origin +
+          d * travel +
+          Offset(0, 0.22 * unit * lt * lt + 6 * math.sin(lt * 9 + i));
+      final alpha =
+          ((1 - lt) * 0.85).clamp(0.0, 1.0) * (lt < 0.08 ? lt / 0.08 : 1.0);
+      if (alpha <= 0.01) continue;
+      p.color = _palette[i % _palette.length].withOpacity(alpha);
+      canvas.save();
+      canvas.translate(pos.dx, pos.dy);
+      canvas.rotate(_spin[i] * lt + i);
+      final w = _w[i];
+      final h = _h[i];
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset.zero, width: w, height: h),
+        p,
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter old) =>
+      old.s != s || old.enabled != enabled;
 }
 
 /// 开屏主转速表（与 REV 应用图标同形的圆角方块转速表）——完整自绘。

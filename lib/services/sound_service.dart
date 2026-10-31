@@ -14,16 +14,19 @@ class SoundService {
   static final SoundService instance = SoundService._();
 
   final AudioPlayer _player = AudioPlayer();
+
+  /// 开屏氛围音专用播放器：与点火轰鸣/提示音分轨，互不打断。
+  final AudioPlayer _splashPlayer = AudioPlayer();
   bool _enabled = true;
-  bool _inited = false;
+  Future<void>? _initFuture;
   DateTime? _lastAlertAt;
 
   bool get enabled => _enabled;
 
-  /// 启动时从本地设置加载开关。
-  Future<void> init() async {
-    if (_inited) return;
-    _inited = true;
+  /// 启动时从本地设置加载开关（并发调用共享同一个 Future）。
+  Future<void> init() => _initFuture ??= _loadEnabled();
+
+  Future<void> _loadEnabled() async {
     try {
       _enabled = await AppStore.instance.getSoundEnabled();
     } catch (_) {
@@ -40,10 +43,14 @@ class SoundService {
       try {
         await _player.stop();
       } catch (_) {}
+      try {
+        await _splashPlayer.stop();
+      } catch (_) {}
     }
   }
 
   Future<void> _playAsset(String asset) async {
+    await init();
     if (!_enabled) return;
     try {
       await _player.stop();
@@ -54,6 +61,28 @@ class SoundService {
   }
 
   Future<void> _play() => _playAsset('audio/bluetooth_connected.wav');
+
+  /// 开屏氛围音：原创 4.0s 合成音轨（低频铺垫 → 点火 → 标题重音 → 冲刺 → 收尾）。
+  /// 与点火轰鸣分属两个播放器，1.05s 点火时不会截断氛围音。
+  Future<void> playSplashBed() async {
+    await init();
+    if (!_enabled) return;
+    try {
+      await _splashPlayer.stop();
+      await _splashPlayer.play(
+        AssetSource('audio/splash_bed.wav'),
+        volume: 0.62,
+      );
+    } catch (e) {
+      debugPrint('splash bed play failed: $e');
+    }
+  }
+
+  Future<void> stopSplashBed() async {
+    try {
+      await _splashPlayer.stop();
+    } catch (_) {}
+  }
 
   /// 开屏点火轰鸣（起动机→点火→怠速，约 3.0s）。
   /// 与全局音效开关联动：关闭时直接 return 静音；播放前停掉旧音，避免叠音。
@@ -89,6 +118,9 @@ class SoundService {
   void dispose() {
     try {
       _player.dispose();
+    } catch (_) {}
+    try {
+      _splashPlayer.dispose();
     } catch (_) {}
   }
 }

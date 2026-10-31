@@ -1,5 +1,5 @@
 /*
- * REV 云端服务 v2.17.4（历史趋势 + 车队共享 + viewer 角色）
+ * REV 云端服务 v2.17.5（历史趋势 + 车队共享 + viewer 角色）
  * 零依赖 Node.js（v18+，仅内置 http/fs/path/crypto/https）
  *
  * v2.16.0 新增：
@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
+const { createClientIp } = require('./proxy_ip');
 
 const PORT = Number(process.env.PORT || 8080);
 const TRACK_LIMIT = Math.max(100, Number(process.env.TRACK_LIMIT || 2000));
@@ -211,13 +212,11 @@ function getSession(req) {
 
 /* ---------------- 限流 ---------------- */
 const rateBuckets = new Map();
-function clientIp(req) {
-  const cf = req.headers['cf-connecting-ip'];
-  if (cf) return String(cf).trim();
-  const xf = req.headers['x-forwarded-for'];
-  if (xf) return String(xf).split(',')[0].trim();
-  return req.socket.remoteAddress || 'unknown';
-}
+// 只有本机/显式配置的反向代理才信任转发头；公网直连忽略 XFF/CF，防伪造绕过限流。
+const clientIp = createClientIp({
+  trustedProxies: process.env.TRUSTED_PROXIES || '127.0.0.1,::1',
+  trustCf: process.env.TRUST_CF_CONNECTING_IP === '1',
+});
 function hitLimit(key, limit, windowMs = RATE_WINDOW_MS) {
   const now = Date.now();
   let b = rateBuckets.get(key);
@@ -404,9 +403,9 @@ function sweepDevices() {
 
 /* ---------------- 版本清单 ---------------- */
 const LATEST = {
-  versionCode: 58, versionName: '2.17.4',
-  apkSha256: '2f971ef8bd01addfd8cc7ce6823901372dec5faedd66c12688f6f80e05544966',
-  notes: 'v2.17.4：安全加固——生产包默认改走 HTTPS（mayangyang.eu.cc），公网明文 HTTP 一律拒绝；更新包安装前校验 SHA-256；关闭应用数据备份（allowBackup=false）；服务端 data 目录/文件收紧到 700/600。v2.17.3：开屏细节修正——REV 标题橙色高光改为只扫过字形（不再像一块色条盖住字母），收尾白闪亮度减半，夜间上车更不刺眼。v2.17.2：开屏动画升级——3D 透视镜头（开场推近转拉远 + 绕 Y 轴扫过）、Tron 透视网格地面、点火冲击波、HUD 四角框、字幕打字机与怠速指针微抖。v2.17.1：服务端同步；看板 no-store；检查更新失败明确报错。v2.17.0：P1 四项。①诊断解读升级：深度诊断与 PDF 报告里的故障码补充严重度 / 能否继续开 / 参考费用 / 自查三步；新增离线症状自查（22 类常见症状 → 疑似故障码，纯本机规则库，不联网不上传）。②油耗与用车账本：加油记录、满箱到满箱长期油耗 / 每公里油费 / 趋势，保养 / 保险 / 年检到期提醒。③多车车库：多辆车独立车型档案 + VIN 自动识别，行程与加油记录按车归属，列表可切「当前车 / 全部」。④行程导出补齐 GPX / KML，新增同路线历史对比与行程合并 / 拆分。',
+  versionCode: 59, versionName: '2.17.5',
+  apkSha256: '061658d31c97844bee189e8dfa035f12d9c3ef654d6e3d4353c8fd52730919e6',
+  notes: 'v2.17.5：开屏电影感与声音——原创 4.0s 合成氛围音轨（低频铺垫→点火→标题重音→冲刺→收尾），与画面同轴、受音效开关控制；新增标题横扫漏光、落位彩纸爆点与点火/标题/收尾三段镜头震动，原有 4.0s 节奏与全部自绘层保留。安全：服务端只信任本机/显式配置的反向代理转发头，公网直连伪造 X-Forwarded-For / cf-connecting-ip 不再能绕过限流；App 会话 token 迁入系统安全存储（Keystore）并自动迁移旧数据。v2.17.4：默认 HTTPS + 更新包 SHA-256 + 关闭备份 + 服务端 600 权限。v2.17.3：开屏标题高光只扫字形、收尾白闪减半。v2.17.2：开屏 3D 镜头/网格地面/冲击波/HUD/打字机。v2.17.1：服务端同步与检查更新修复。v2.17.0：诊断解读/油耗账本/多车车库/行程工具。',
 };
 
 /* ---------------- 静态下载表 ---------------- */
@@ -934,7 +933,7 @@ const server = http.createServer(handler);
 const server80 = http.createServer(handler);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`REV server v2.17.4 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
+  console.log(`REV server v2.17.5 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
 });
 
 server80.on('error', (e) => {

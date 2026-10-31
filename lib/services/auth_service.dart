@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:obd_dashboard/services/cloud_service.dart';
@@ -27,8 +28,9 @@ class AuthResult {
 }
 
 /// 账号体系：注册 / 登录 / 退出 / 启动恢复。
-/// 会话 token 持久化到 SharedPreferences，上报时由 CloudService 带上
-/// `Authorization: Bearer <token>`。
+/// 会话 token 持久化到系统安全存储（Android Keystore 加密）；旧版
+/// SharedPreferences 数据首次启动自动迁移，安全存储不可用时回退，
+/// 上报时由 CloudService 带上 `Authorization: Bearer <token>`。
 class AuthService extends ChangeNotifier {
   AuthService({String? baseUrl})
       : _baseUrl = (baseUrl == null || baseUrl.isEmpty)
@@ -38,6 +40,8 @@ class AuthService extends ChangeNotifier {
   static const kToken = 'auth_token';
   static const kUsername = 'auth_username';
   static const kRole = 'auth_role';
+
+  static const _TokenStore _store = _TokenStore();
 
   String _baseUrl;
   String get baseUrl => _baseUrl;
@@ -61,10 +65,10 @@ class AuthService extends ChangeNotifier {
   /// 启动时恢复上次登录态。
   Future<void> restore() async {
     try {
-      final p = await SharedPreferences.getInstance();
-      _token = p.getString(kToken);
-      _username = p.getString(kUsername);
-      _role = p.getString(kRole);
+      final saved = await _store.load();
+      _token = saved[kToken];
+      _username = saved[kUsername];
+      _role = saved[kRole];
       if (_token != null && _token!.isNotEmpty) {
         debugPrint('auth restored: $_username ($_role)');
       }
@@ -151,10 +155,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _persist(String token, String username, String role) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(kToken, token);
-    await p.setString(kUsername, username);
-    await p.setString(kRole, role);
+    await _store.save(token: token, username: username, role: role);
     _token = token;
     _username = username;
     _role = role;
@@ -162,13 +163,102 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _clear() async {
-    final p = await SharedPreferences.getInstance();
-    await p.remove(kToken);
-    await p.remove(kUsername);
-    await p.remove(kRole);
+    await _store.clear();
     _token = null;
     _username = null;
     _role = null;
     notifyListeners();
+  }
+}
+
+/// token 存储适配器：优先系统安全存储；旧版 SharedPreferences 自动迁移；
+/// 插件不可用（桌面/测试/个别老设备 Keystore 异常）时回退 SharedPreferences，
+/// 保证登录态不丢、功能不崩。
+class _TokenStore {
+  const _TokenStore();
+
+  static const FlutterSecureStorage _secure = FlutterSecureStorage();
+
+  Future<Map<String, String?>> load() async {
+    try {
+      final token = await _secure.read(key: AuthService.kToken);
+      if (token != null && token.isNotEmpty) {
+        return {
+          AuthService.kToken: token,
+          AuthService.kUsername:
+              await _secure.read(key: AuthService.kUsername),
+          AuthService.kRole: await _secure.read(key: AuthService.kRole),
+        };
+      }
+    } catch (_) {/* 安全存储不可用 → 走旧版/回退 */}
+
+    final p = await SharedPreferences.getInstance();
+    final token = p.getString(AuthService.kToken);
+    final username = p.getString(AuthService.kUsername);
+    final role = p.getString(AuthService.kRole);
+
+    // 旧版明文 token → 安全存储迁移；失败则继续用旧存储，不影响这次启动。
+    if (token != null && token.isNotEmpty) {
+      try {
+        if (username != null) {
+          await _secure.write(key: AuthService.kUsername, value: username);
+        }
+        if (role != null) {
+          await _secure.write(key: AuthService.kRole, value: role);
+        }
+        await _secure.write(key: AuthService.kToken, value: token);
+        await p.remove(AuthService.kToken);
+        await p.remove(AuthService.kUsername);
+        await p.remove(AuthService.kRole);
+      } catch (_) {/* 保留旧存储 */}
+    }
+
+    return {
+      AuthService.kToken: token,
+      AuthService.kUsername: username,
+      AuthService.kRole: role,
+    };
+  }
+
+  Future<void> save({
+    required String token,
+    required String username,
+    required String role,
+  }) async {
+    var secureOk = false;
+    try {
+      // token 最后写：只有前两项成功后才落下“可用凭证”。
+      await _secure.write(key: AuthService.kUsername, value: username);
+      await _secure.write(key: AuthService.kRole, value: role);
+      await _secure.write(key: AuthService.kToken, value: token);
+      secureOk = true;
+    } catch (_) {
+      try {
+        await _secure.delete(key: AuthService.kToken);
+      } catch (_) {}
+    }
+
+    final p = await SharedPreferences.getInstance();
+    if (secureOk) {
+      await p.remove(AuthService.kToken);
+      await p.remove(AuthService.kUsername);
+      await p.remove(AuthService.kRole);
+      return;
+    }
+    await p.setString(AuthService.kToken, token);
+    await p.setString(AuthService.kUsername, username);
+    await p.setString(AuthService.kRole, role);
+  }
+
+  Future<void> clear() async {
+    try {
+      await _secure.delete(key: AuthService.kToken);
+      await _secure.delete(key: AuthService.kUsername);
+      await _secure.delete(key: AuthService.kRole);
+    } catch (_) {}
+    final p = await SharedPreferences.getInstance();
+    await p.remove(AuthService.kToken);
+    await p.remove(AuthService.kUsername);
+    await p.remove(AuthService.kRole);
   }
 }

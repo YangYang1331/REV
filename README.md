@@ -1,10 +1,22 @@
-# REV — 车机 OBD 实时仪表盘（v2.17.4）
+# REV — 车机 OBD 实时仪表盘（v2.17.5）
 
 十套皮肤 · 26 套真实引擎采样声浪 · 账号体系与车队看板 · DTC 中文故障码 · 马力曲线 / 电池健康 / 圈速 / 前台保活。
-包名 `com.rev.cluster`，versionCode 58 / versionName 2.17.4。
+包名 `com.rev.cluster`，versionCode 59 / versionName 2.17.5。
 
 > 开源版默认不内置任何服务器地址（不连作者服务器）。请在设置里填写你自己部署的服务器地址，
 > 或用 `--dart-define=DEFAULT_BASE=... --dart-define=DEFAULT_ENDPOINT=...` 注入；详见 `OPENSOURCE_DEPLOY.md`。
+
+## v2.17.5 主要变更（开屏氛围音 + 安全加固）
+
+- **原创开屏音轨**：新增 4.0s 合成氛围音（低频铺垫 → 点火重音 → 标题落位 → 冲刺 → 收尾白闪），
+  与画面共用同一条时间轴；点火轰鸣仍单独播放，两条音轨不会互相截断，受全局音效开关控制。
+- **开屏画面增强（原 4.0s 结构不变）**：标题落位时新增暖色横向漏光/变形镜头光斑、彩纸碎片爆点，
+  点火、标题、收尾白闪各加一次短促镜头震动；速度线在标题与收尾处轻微脉冲。
+- **真实 IP 防伪造**：服务端只信任本机/`TRUSTED_PROXIES` 配置的反向代理转发头，
+  公网直连伪造 `X-Forwarded-For` / `cf-connecting-ip` 不再能绕过登录/注册限流；
+  信任代理时取 XFF 最后一跳，`cf-connecting-ip` 需显式 `TRUST_CF_CONNECTING_IP=1`。
+- **token 安全存储**：登录 token 从 SharedPreferences 迁入系统安全存储（Android Keystore 加密），
+  旧数据首次启动自动迁移；安全存储不可用时回退，不影响登录态。
 
 ## v2.17.4 主要变更（安全加固）
 

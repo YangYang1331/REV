@@ -33,6 +33,14 @@ node server.js            # 监听端口见 server.js 顶部配置
 ```
 
 健康检查：`curl http://你的地址:端口/api/v1/latest` 应返回 JSON。
+> **反向代理与真实 IP**：服务端默认只信任来自本机回环地址的 `X-Forwarded-For`，
+> 公网直连时完全忽略客户端自带的转发头（防止伪造 IP 绕过登录/注册限流）。
+> 如果 Nginx/Caddy 与 Node 不在同一台机器或不在回环地址上，请把代理出口 IP
+> 加入环境变量 `TRUSTED_PROXIES`（逗号分隔，例如 `TRUSTED_PROXIES=10.0.0.2`）。
+> 只有明确走 Cloudflare 时才设置 `TRUST_CF_CONNECTING_IP=1`。
+> 反向代理请用 `proxy_set_header X-Forwarded-For $remote_addr;` **覆盖**客户端头，
+> 不要用 `$proxy_add_x_forwarded_for` 追加，否则最外层伪造值仍可能被带入。
+
 
 ---
 
@@ -82,7 +90,7 @@ flutter build apk --release
 
 - [ ] 源码/配置里 grep 不到任何明文域名/IP/密码：
   ```bash
-  grep -rE "mayangyang|139\.224\.30\.235|Deploy@|Myy@" .
+  grep -rEi "mayangyang|139\.224\.30\.235|Deploy@|旧默认口令" .
   ```
   （应无输出；`OPENSOURCE_DEPLOY.md` 本身提及这些串仅作反面示例。）
 - [ ] 后端数据目录已备份、已前置 HTTPS。

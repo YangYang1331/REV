@@ -76,12 +76,15 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
         onChanged: (v) async {
           if (v == null) return;
           setState(() => _selected = v);
-          // ignore: discarded_futures
-          EngineSoundService.instance.selectPack(v);
+          final svc = EngineSoundService.instance;
+          await svc.selectPack(v);
+          // 整车预设会顺带切引擎档案，调教面板要跟着刷新，
+          // 否则切回「合成引擎 · 可调」时高亮的还是上一个档案。
+          if (mounted) setState(() => _profile = svc.profile);
           // 采样包与「固定档案」的合成预设都能试听；只有可调合成引擎没有。
           if (!p.synthOnly || p.profileId != null) {
             // ignore: discarded_futures
-            EngineSoundService.instance.previewPack(v);
+            svc.previewPack(v);
           }
         },
       );

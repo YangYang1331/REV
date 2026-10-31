@@ -150,8 +150,9 @@ def check_integrity(manifest):
     ids = [p['id'] for p in manifest['packs'] if not p.get('synthOnly')]
     if len(ids) != len(set(ids)):
         fails.append('manifest: pack id 重复')
-    expected = {os.path.join(pid, q, f'loop_{b}.flac')
-                for pid in ids for q in ('hi', 'lo') for b in BANDS}
+    expected = {os.path.join(pk['id'], q, f'loop_{b}.flac')
+                for pk in manifest['packs'] if not pk.get('synthOnly')
+                for q in ('hi', 'lo') for b in (pk.get('bands') or BANDS)}
     on_disk = set()
     for path in glob.glob(os.path.join(ROOT, '*', '*', 'loop_*.*')):
         rel = os.path.relpath(path, ROOT)
@@ -178,7 +179,7 @@ def main():
         pid = p['id']
         cents = {}
         hfs = {}
-        for b in BANDS:
+        for b in (p.get('bands') or BANDS):
             for q in ('hi', 'lo'):
                 path = os.path.join(ROOT, pid, q, f'loop_{b}.flac')
                 if not os.path.exists(path):

@@ -19,8 +19,8 @@ class EnginePackManifest {
     this.hasWhine = false,
     this.synthOnly = false,
     this.core = 'idle',
+    this.coreRpm = 0,
     this.toneHz = 9000,
-    this.profileId,
   });
 
   final String id;
@@ -50,9 +50,10 @@ class EnginePackManifest {
   /// 采样音色低通截止（Hz）：录音本身的高频嘶声/风噪在这里收掉。
   final double toneHz;
 
-  /// 固定引擎档案（v2.17.8）：选中该包时把合成档案切到它。
-  /// 只用于「实时合成」类的整车预设（如领克 03+），采样包为 null。
-  final String? profileId;
+  /// 核心录音实际所在的转速（v2.17.9，0 = 未知，沿用按音区估算）。
+  /// 量出录音的点火基频后折算成转速，变调曲线在这一点倍速正好 1.0，
+  /// 怠速/红线再向两侧展开，避免整段录音偏高或偏低。
+  final double coreRpm;
 
   static EnginePackManifest fromJson(Map<String, dynamic> j) =>
       EnginePackManifest(
@@ -71,9 +72,7 @@ class EnginePackManifest {
             ? j['core'].toString()
             : 'idle',
         toneHz: (j['toneHz'] as num?)?.toDouble() ?? 9000,
-        profileId: (j['profile']?.toString().trim().isNotEmpty ?? false)
-            ? j['profile'].toString().trim()
-            : null,
+        coreRpm: (j['coreRpm'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -180,7 +179,18 @@ double corePlaySpeed({
   required double rpm,
   required double idleRpm,
   required double redlineRpm,
+  double coreRpm = 0,
 }) {
+  // 已知录音转速时用三点标定：怠速 0.68 → coreRpm 1.0 → 红线 1.85。
+  // 比按音区估算更准，录音不会整体偏高/偏低。
+  if (coreRpm > idleRpm && coreRpm < redlineRpm) {
+    if (rpm <= coreRpm) {
+      final k = ((rpm - idleRpm) / (coreRpm - idleRpm)).clamp(0.0, 1.0);
+      return 0.68 + 0.32 * k;
+    }
+    final k = ((rpm - coreRpm) / (redlineRpm - coreRpm)).clamp(0.0, 1.0);
+    return 1.0 + 0.85 * k;
+  }
   final span = (redlineRpm - idleRpm).abs();
   final t = span <= 0 ? 0.0 : ((rpm - idleRpm) / span).clamp(0.0, 1.0);
   final tCore = switch (coreBand) {
@@ -310,10 +320,7 @@ EnginePackManifest resolveEnginePack(
 enum EnginePackGroup { na, turbo, supercharged, rotary, synth }
 
 EnginePackGroup enginePackGroup(EnginePackManifest p) {
-  // 固定档案的合成预设（如领克 03+）按动力属性归组，其余 synthOnly 归合成组。
-  if (p.id == 'synth' || (p.synthOnly && p.profileId == null)) {
-    return EnginePackGroup.synth;
-  }
+  if (p.synthOnly || p.id == 'synth') return EnginePackGroup.synth;
   if (p.supercharged) return EnginePackGroup.supercharged;
   if (p.id.contains('rotary')) return EnginePackGroup.rotary;
   if (p.turbo) return EnginePackGroup.turbo;

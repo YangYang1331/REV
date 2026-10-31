@@ -1,7 +1,7 @@
 name: obd_dashboard
 description: REV — 车机 OBD 实时仪表盘（十套皮肤 · 账号体系 · 车队看板 · 马力曲线/电池健康/故障码/圈速/多页面/前台保活）
 publish_to: "none"
-version: 2.17.8+62
+version: 2.17.9+63
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -77,8 +77,6 @@ flutter:
     - assets/audio/packs/mazda6_na/lo/
     - assets/audio/packs/hellcat_supercharged/hi/
     - assets/audio/packs/hellcat_supercharged/lo/
-    - assets/audio/packs/ls_v8/hi/
-    - assets/audio/packs/ls_v8/lo/
     - assets/audio/packs/lambo_v10/hi/
     - assets/audio/packs/lambo_v10/lo/
     - assets/audio/packs/v12/hi/
@@ -87,32 +85,24 @@ flutter:
     - assets/audio/packs/bmw_s58/lo/
     - assets/audio/packs/ea888_20t/hi/
     - assets/audio/packs/ea888_20t/lo/
+    - assets/audio/packs/lynk_03/hi/
+    - assets/audio/packs/lynk_03/lo/
     - assets/audio/packs/porsche_gt3/hi/
     - assets/audio/packs/porsche_gt3/lo/
     - assets/audio/packs/porsche_turbo/hi/
     - assets/audio/packs/porsche_turbo/lo/
     - assets/audio/packs/audi_r8/hi/
     - assets/audio/packs/audi_r8/lo/
-    - assets/audio/packs/nissan_gtr/hi/
-    - assets/audio/packs/nissan_gtr/lo/
     - assets/audio/packs/mazda_rotary/hi/
     - assets/audio/packs/mazda_rotary/lo/
     - assets/audio/packs/honda_typer/hi/
     - assets/audio/packs/honda_typer/lo/
-    - assets/audio/packs/mustang_gt/hi/
-    - assets/audio/packs/mustang_gt/lo/
     - assets/audio/packs/corvette_c8/hi/
     - assets/audio/packs/corvette_c8/lo/
-    - assets/audio/packs/dodge_viper/hi/
-    - assets/audio/packs/dodge_viper/lo/
     - assets/audio/packs/amg_c63/hi/
     - assets/audio/packs/amg_c63/lo/
     - assets/audio/packs/subaru_sti/hi/
     - assets/audio/packs/subaru_sti/lo/
-    - assets/audio/packs/mitsubishi_evo/hi/
-    - assets/audio/packs/mitsubishi_evo/lo/
-    - assets/audio/packs/lexus_lfa/hi/
-    - assets/audio/packs/lexus_lfa/lo/
     # v2.15.3 视频采样包（用户提供参考视频，取最干净的稳态引擎段）
     - assets/audio/packs/video_lfa_v10/hi/
     - assets/audio/packs/video_lfa_v10/lo/

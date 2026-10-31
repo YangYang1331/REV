@@ -151,12 +151,6 @@ class EngineSoundService {
   /// 当前调音参数。
   EngineTuning get tuning => _tuning;
 
-  /// 固定预设包（如领克 03+）用自身默认调音，避免被用户给合成引擎
-  /// 设的亮度/颗粒/回火量带偏；「合成引擎 · 可调」仍用用户参数。
-  EngineTuning get _effectiveTuning => _activePack?.profileId != null
-      ? const EngineTuning(grit: 0.45, popAmount: 0.55)
-      : _tuning;
-
   /// 设置页切换引擎型号：持久化 + 热更新（采样包模式不影响）。
   Future<void> setProfile(String id) async {
     _profile = EngineProfile.byId(id);
@@ -201,19 +195,11 @@ class EngineSoundService {
   }
 
   /// 设置页选包：持久化 + 若正在运行则热切换采样源。
-  ///
-  /// 带 [EnginePackManifest.profileId] 的整车预设（如领克 03+）会把合成
-  /// 档案一并切过去，用户不需要再进「合成引擎调教」手工对参数。
   Future<void> selectPack(String id) async {
     _packId = id;
     try {
       await AppStore.instance.setEnginePack(id);
     } catch (_) {}
-    if (_packs.isEmpty) await loadManifest();
-    final preset = resolveEnginePack(id, _packs).profileId;
-    if (preset != null && preset != _profile.id) {
-      await setProfile(preset);
-    }
     if (_active) {
       await _reloadPackSources();
     }
@@ -234,12 +220,6 @@ class EngineSoundService {
 
   /// 设置页试听：播放该包核心循环 2 秒后自动停（不影响仪表盘运行态）。
   Future<void> previewPack(String id) async {
-    // 实时合成预设：现场渲染一段扫转试听（不依赖音频素材）。
-    for (final p in _packs) {
-      if (p.id == id && p.profileId != null) {
-        return _previewSynthProfile(EngineProfile.byId(p.profileId!));
-      }
-    }
     try {
       await _ensureSoloud();
       if (!_soloudReady) return;
@@ -278,43 +258,6 @@ class EngineSoundService {
       await SoLoud.instance.disposeSource(src);
     } catch (e) {
       debugPrint('preview pack failed (ignored): $e');
-    }
-  }
-
-  /// 实时合成预设的试听：现场渲染 2.4 秒「怠速 → 开阀」扫转。
-  ///
-  /// 与仪表盘里的实时合成同源（同样的阶次权重 + 阀门塑形），只是把
-  /// 频率变化提前算好写成一段 WAV，点选后立刻能听到该预设的性格。
-  Future<void> _previewSynthProfile(EngineProfile profile) async {
-    AudioSource? src;
-    try {
-      await _ensureSoloud();
-      if (!_soloudReady) return;
-      src = await SoLoud.instance.loadMem(
-          'preview_${profile.id}.wav', _makeProfileSweepWav(profile));
-      final prev = _previewHandle;
-      if (prev != null) {
-        try {
-          SoLoud.instance.stop(prev);
-        } catch (_) {}
-      }
-      final h = _bus?.play(src, volume: 0.55);
-      _previewHandle = h;
-      await Future.delayed(const Duration(milliseconds: 2400));
-      if (h != null) {
-        try {
-          SoLoud.instance.stop(h);
-        } catch (_) {}
-      }
-      _previewHandle = null;
-    } catch (e) {
-      debugPrint('preview synth profile failed (ignored): $e');
-    } finally {
-      if (src != null) {
-        try {
-          await SoLoud.instance.disposeSource(src);
-        } catch (_) {}
-      }
     }
   }
 
@@ -432,7 +375,7 @@ class EngineSoundService {
   /// 合成模式用的「伪 manifest」：把引擎档案翻译成回火/泄压触发条件，
   /// 复用采样包同一套 [EngineOneShotDecider]，避免两套阈值各写一遍。
   EnginePackManifest? get _synthManifest {
-    if (_effectiveTuning.popAmount <= 0.02) return null;
+    if (_tuning.popAmount <= 0.02) return null;
     return EnginePackManifest(
       id: 'synth',
       name: _profile.name,
@@ -455,14 +398,13 @@ class EngineSoundService {
           if (_synthPops.isEmpty) return;
           final src = _synthPops[_shotRnd.nextInt(_synthPops.length)];
           final vol =
-              (0.55 + 0.45 * _shotRnd.nextDouble()) * _effectiveTuning.popAmount;
+              (0.55 + 0.45 * _shotRnd.nextDouble()) * _tuning.popAmount;
           _bus!.play(src, volume: vol.clamp(0.0, 1.0));
         } else if (shot == EngineOneShot.blowoff) {
           final src = _synthBlowoff;
           if (src == null) return;
           _bus!.play(src,
-              volume: (0.35 + 0.35 * _effectiveTuning.popAmount)
-                  .clamp(0.0, 1.0));
+              volume: (0.35 + 0.35 * _tuning.popAmount).clamp(0.0, 1.0));
         }
       } catch (_) {}
     });
@@ -650,13 +592,6 @@ class EngineSoundService {
     // 清旧源。
     await _unloadSampleSources();
     _activePack = resolveEnginePack(_packId, _packs);
-    // 整车预设以 manifest 的 profile 为准（冷启动/热切换都对齐）。
-    final preset = _activePack!.profileId;
-    if (preset != null && preset != _profile.id) {
-      _profile = EngineProfile.byId(preset);
-    }
-    _mapper?.setProfile(_profile);
-    _mapper?.setTuning(_effectiveTuning);
 
     if (_activePack!.synthOnly || _packId == 'synth') {
       await _loadSynthSourcesLocked();
@@ -699,9 +634,8 @@ class EngineSoundService {
         final ws = _bus!.filters.waveShaperFilter;
         if (!ws.isActive) ws.activate();
         ws.wet().value = 1.0;
-        ws.amount().value =
-            (_effectiveTuning.grit * _profile.roughness * 0.85)
-                .clamp(0.0, 0.85);
+        ws.amount().value = (_tuning.grit * _profile.roughness * 0.85)
+            .clamp(0.0, 0.85);
       } catch (e) {
         debugPrint('bus waveshaper init failed (ignored): $e');
       }
@@ -881,6 +815,7 @@ class EngineSoundService {
           rpm: _pendingRpm,
           idleRpm: _mapper!.idleRpm,
           redlineRpm: _mapper!.redlineRpm,
+          coreRpm: _activePack!.coreRpm,
         );
         _coreSpeed += (targetSpeed - _coreSpeed) * 0.15;
         final handle = _coreHandle;
@@ -1023,68 +958,6 @@ class EngineSoundService {
 
   /// 本地程序化生成一小段低通噪声 wav（16-bit PCM mono 22050Hz，2s）。
   /// 完全本地合成、零版权采样；噪声循环即使有轻微接缝也听不出来。
-  /// 渲染一段预设的「怠速→4600rpm」扫转试听（16bit/22050Hz 单声道）。
-  ///
-  /// 阶次权重按转带插值，阀门包在 3000rpm 附近放开高阶，再叠一层排气噪声
-  /// 与软削波——和运行时的合成路径保持同一套性格。
-  Uint8List _makeProfileSweepWav(EngineProfile p) {
-    const sr = 22050;
-    const durationMs = 2400;
-    const idleRpm = 900.0;
-    const topRpm = 4600.0;
-    const tIdle = 900.0;
-    const tTop = 6500.0;
-    const n = sr * durationMs ~/ 1000;
-    final samples = Float64List(n);
-    final phases = List<double>.filled(kEngineOrders.length, 0.0);
-    final rnd = math.Random(20261031);
-    var lp = 0.0;
-    for (var i = 0; i < n; i++) {
-      final tt = i / n;
-      final rpm = idleRpm + (topRpm - idleRpm) * tt;
-      final tN = ((rpm - tIdle) / (tTop - tIdle)).clamp(0.0, 1.0);
-      var valve = 1.0;
-      final vOpen = p.valveOpenRpm;
-      if (vOpen > 0) {
-        final raw = ((rpm - (vOpen - 350.0)) / 700.0).clamp(0.0, 1.0);
-        valve = raw * raw * (3.0 - 2.0 * raw);
-      }
-      final f0 = p.firingHz(rpm);
-      var sum = 0.0;
-      for (var k = 0; k < kEngineOrders.length; k++) {
-        final order = kEngineOrders[k];
-        final idleW = p.idleWeights[order] ?? 0.0;
-        final highW = p.highWeights[order] ?? 0.0;
-        var g = idleW + (highW - idleW) * tN;
-        if (vOpen > 0 && order >= 3.0) g *= 0.55 + 0.45 * valve;
-        phases[k] += 2 * math.pi * f0 * order / sr;
-        sum += g * math.sin(phases[k]);
-      }
-      // 排气噪声随转速抬一点，避免纯正弦的「电子味」。
-      lp = 0.96 * lp + 0.04 * (rnd.nextDouble() * 2 - 1);
-      sum += lp * (1.1 + 2.2 * tN);
-      // 软削波：模拟排气脉冲的饱和，不产生刺耳的数字削顶。
-      samples[i] = _softClip(sum * 0.55) * (0.86 + 0.14 * valve);
-    }
-    var peak = 0.0;
-    for (final v in samples) {
-      final a = v.abs();
-      if (a > peak) peak = a;
-    }
-    final gain = peak > 1e-6 ? 0.82 / peak : 1.0;
-    final pcm = Int16List(n);
-    for (var i = 0; i < n; i++) {
-      pcm[i] = (samples[i] * gain * 32767).round().clamp(-32768, 32767);
-    }
-    return _wavFromPcm(pcm, sr);
-  }
-
-  /// tanh 软削波（dart:math 没有 tanh，这里用指数实现，限幅避免溢出）。
-  double _softClip(double x) {
-    final e = math.exp(2.0 * x.clamp(-8.0, 8.0));
-    return (e - 1.0) / (e + 1.0);
-  }
-
   Uint8List _makeNoiseWav() {
     const sr = 22050;
     const seconds = 2;

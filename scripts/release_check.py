@@ -23,19 +23,18 @@ AAPT = f"{BT}/aapt"
 APKSIGNER = f"{BT}/apksigner"
 ZIPALIGN = f"{BT}/zipalign"
 
-EXPECT_VCODE = 62
-EXPECT_VNAME = "2.17.8"
+EXPECT_VCODE = 63
+EXPECT_VNAME = "2.17.9"
 EXPECT_PKG = "com.rev.cluster"
 EXPECT_MINSdk = 24
 EXPECT_CERT_PREFIX = "3f16feb"
 
-# 24 个车型包（20 内置 + 4 视频采样，与 pubspec / manifest.json 一致）
+# 19 个真实录音包（含领克 03+ 实车采样）+ 4 个视频采样包
 PACKS = [
     "mazda6_na", "mazda_rotary", "ea888_20t", "amg_c63", "bmw_s58",
-    "audi_r8", "hellcat_supercharged", "honda_typer", "lambo_v10", "lexus_lfa",
-    "ls_v8", "mitsubishi_evo", "mustang_gt", "nissan_gtr", "porsche_gt3",
-    "porsche_turbo", "subaru_sti", "corvette_c8", "dodge_viper",
-    "v12", "video_lfa_v10", "video_corvette_v8",
+    "audi_r8", "hellcat_supercharged", "honda_typer", "lambo_v10",
+    "porsche_gt3", "porsche_turbo", "subaru_sti", "corvette_c8",
+    "v12", "lynk_03", "video_lfa_v10", "video_corvette_v8",
     "video_aventador_v12", "video_rx8_rotary",
 ]
 

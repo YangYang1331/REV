@@ -174,22 +174,6 @@ void main() {
     // v2.17.7 新增字段的默认值。
     expect(p.core, 'idle');
     expect(p.toneHz, 9000);
-    expect(p.profileId, isNull);
-  });
-
-  test('manifest.fromJson 解析固定档案预设（领克 03+）', () {
-    final p = EnginePackManifest.fromJson(const {
-      'id': 'lynk_03',
-      'name': '领克 03+ 2.0T',
-      'turbo': true,
-      'synthOnly': true,
-      'bands': [],
-      'profile': 'lynk03',
-    });
-    expect(p.synthOnly, true);
-    expect(p.profileId, 'lynk03');
-    // 带档案的合成预设按动力属性归组，而不是塞进「合成引擎（可调）」。
-    expect(enginePackGroup(p), EnginePackGroup.turbo);
   });
 
   group('核心循环变调曲线（v2.17.7）', () {
@@ -233,6 +217,62 @@ void main() {
               coreBand: 'mid', rpm: 800 + 5700 * 0.55, idleRpm: 800,
               redlineRpm: 6500),
           closeTo(1.0, 1e-9));
+    });
+  });
+
+  group('录音转速标定（v2.17.9 coreRpm）', () {
+    const idle = 800.0;
+    const redline = 6500.0;
+    const coreRpm = 1260.0;
+
+    test('fromJson 解析 coreRpm，缺省为 0', () {
+      final p = EnginePackManifest.fromJson(const {
+        'id': 'lynk_03',
+        'name': '领克 03+ 2.0T',
+        'coreRpm': 1260,
+      });
+      expect(p.coreRpm, 1260);
+      expect(const EnginePackManifest(id: 'x', name: '').coreRpm, 0);
+    });
+
+    test('三点标定：怠速 0.68、录音转速 1.0、红线 1.85', () {
+      double at(double rpm) => corePlaySpeed(
+          coreBand: 'idle',
+          rpm: rpm,
+          idleRpm: idle,
+          redlineRpm: redline,
+          coreRpm: coreRpm);
+      expect(at(idle), closeTo(0.68, 1e-9));
+      expect(at(coreRpm), closeTo(1.0, 1e-9));
+      expect(at(redline), closeTo(1.85, 1e-9));
+    });
+
+    test('标定曲线仍单调递增', () {
+      var prev = 0.0;
+      for (var rpm = idle; rpm <= redline; rpm += 100) {
+        final s = corePlaySpeed(
+            coreBand: 'idle',
+            rpm: rpm,
+            idleRpm: idle,
+            redlineRpm: redline,
+            coreRpm: coreRpm);
+        expect(s, greaterThanOrEqualTo(prev - 1e-9), reason: '$rpm');
+        expect(s, inInclusiveRange(0.68, 1.85));
+        prev = s;
+      }
+    });
+
+    test('coreRpm 非法（≤怠速或≥红线）→ 退回旧音区曲线', () {
+      for (final bad in [0.0, 800.0, 6500.0, 7000.0]) {
+        expect(
+            corePlaySpeed(
+                coreBand: 'idle',
+                rpm: 800,
+                idleRpm: idle,
+                redlineRpm: redline,
+                coreRpm: bad),
+            closeTo(1.0, 1e-9));
+      }
     });
   });
 

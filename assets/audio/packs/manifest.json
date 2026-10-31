@@ -38,24 +38,6 @@
       "core": "idle"
     },
     {
-      "id": "ls_v8",
-      "name": "通用 LS V8",
-      "turbo": false,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": true,
-      "hasBlowoff": false,
-      "hasWhine": false,
-      "synthOnly": false,
-      "core": "idle"
-    },
-    {
       "id": "lambo_v10",
       "name": "兰博基尼 V10",
       "turbo": false,
@@ -135,13 +117,16 @@
       "name": "领克 03+ 2.0T",
       "turbo": true,
       "supercharged": false,
-      "bands": [],
-      "hasPop": true,
-      "hasBlowoff": true,
+      "bands": [
+        "idle"
+      ],
+      "hasPop": false,
+      "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": true,
+      "synthOnly": false,
       "core": "idle",
-      "profile": "lynk03"
+      "coreRpm": 1260,
+      "toneHz": 6000
     },
     {
       "id": "porsche_gt3",
@@ -199,24 +184,6 @@
       "toneHz": 8000
     },
     {
-      "id": "nissan_gtr",
-      "name": "日产 GT-R R35",
-      "turbo": true,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": true,
-      "hasBlowoff": true,
-      "hasWhine": false,
-      "synthOnly": false,
-      "core": "mid"
-    },
-    {
       "id": "mazda_rotary",
       "name": "马自达 RX-7/8 转子",
       "turbo": false,
@@ -254,46 +221,8 @@
       "toneHz": 8000
     },
     {
-      "id": "mustang_gt",
-      "name": "福特野马 GT 5.0",
-      "turbo": false,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": true,
-      "hasBlowoff": false,
-      "hasWhine": false,
-      "synthOnly": false,
-      "core": "low",
-      "toneHz": 7500
-    },
-    {
       "id": "corvette_c8",
       "name": "雪佛兰科尔维特 C8",
-      "turbo": false,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": true,
-      "hasBlowoff": false,
-      "hasWhine": false,
-      "synthOnly": false,
-      "core": "idle",
-      "toneHz": 7500
-    },
-    {
-      "id": "dodge_viper",
-      "name": "道奇蝰蛇 Viper",
       "turbo": false,
       "supercharged": false,
       "bands": [
@@ -345,44 +274,6 @@
       "hasWhine": false,
       "synthOnly": false,
       "core": "idle"
-    },
-    {
-      "id": "mitsubishi_evo",
-      "name": "三菱 Lancer Evo",
-      "turbo": true,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": true,
-      "hasBlowoff": true,
-      "hasWhine": false,
-      "synthOnly": false,
-      "core": "mid",
-      "toneHz": 7500
-    },
-    {
-      "id": "lexus_lfa",
-      "name": "雷克萨斯 LFA",
-      "turbo": false,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": true,
-      "hasBlowoff": false,
-      "hasWhine": false,
-      "synthOnly": false,
-      "core": "low",
-      "toneHz": 5200
     },
     {
       "id": "video_lfa_v10",

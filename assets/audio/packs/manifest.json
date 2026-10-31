@@ -15,7 +15,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle",
+      "toneHz": 4800
     },
     {
       "id": "hellcat_supercharged",
@@ -32,7 +34,8 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": true,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "ls_v8",
@@ -49,7 +52,8 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "lambo_v10",
@@ -66,7 +70,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "low",
+      "toneHz": 8500
     },
     {
       "id": "v12",
@@ -83,7 +89,8 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "bmw_s58",
@@ -100,7 +107,9 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle",
+      "toneHz": 8500
     },
     {
       "id": "ea888_20t",
@@ -117,7 +126,9 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle",
+      "toneHz": 6800
     },
     {
       "id": "porsche_gt3",
@@ -134,7 +145,8 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "porsche_turbo",
@@ -151,7 +163,8 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "audi_r8",
@@ -168,7 +181,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "high",
+      "toneHz": 8000
     },
     {
       "id": "nissan_gtr",
@@ -185,7 +200,8 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "mid"
     },
     {
       "id": "mazda_rotary",
@@ -202,7 +218,8 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "high"
     },
     {
       "id": "honda_typer",
@@ -219,7 +236,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle",
+      "toneHz": 8000
     },
     {
       "id": "mustang_gt",
@@ -236,7 +255,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "low",
+      "toneHz": 7500
     },
     {
       "id": "corvette_c8",
@@ -253,7 +274,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle",
+      "toneHz": 7500
     },
     {
       "id": "dodge_viper",
@@ -270,7 +293,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle",
+      "toneHz": 7500
     },
     {
       "id": "amg_c63",
@@ -287,7 +312,8 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "low"
     },
     {
       "id": "subaru_sti",
@@ -304,7 +330,8 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "mitsubishi_evo",
@@ -321,7 +348,9 @@
       "hasPop": true,
       "hasBlowoff": true,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "mid",
+      "toneHz": 7500
     },
     {
       "id": "lexus_lfa",
@@ -338,7 +367,9 @@
       "hasPop": true,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "low",
+      "toneHz": 5200
     },
     {
       "id": "video_lfa_v10",
@@ -355,24 +386,8 @@
       "hasPop": false,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
-    },
-    {
-      "id": "video_cockpit",
-      "name": "视频采样 · 驾驶舱巡航",
-      "turbo": false,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": false,
-      "hasBlowoff": false,
-      "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "video_corvette_v8",
@@ -389,7 +404,8 @@
       "hasPop": false,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "mid"
     },
     {
       "id": "video_aventador_v12",
@@ -406,7 +422,8 @@
       "hasPop": false,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "idle"
     },
     {
       "id": "video_rx8_rotary",
@@ -423,28 +440,12 @@
       "hasPop": false,
       "hasBlowoff": false,
       "hasWhine": false,
-      "synthOnly": false
-    },
-    {
-      "id": "video_cruise",
-      "name": "视频采样 · 高速巡航",
-      "turbo": false,
-      "supercharged": false,
-      "bands": [
-        "idle",
-        "low",
-        "mid",
-        "high",
-        "bounce"
-      ],
-      "hasPop": false,
-      "hasBlowoff": false,
-      "hasWhine": false,
-      "synthOnly": false
+      "synthOnly": false,
+      "core": "low"
     },
     {
       "id": "synth",
-      "name": "电子 / 概念车",
+      "name": "合成引擎 · 可调",
       "turbo": false,
       "supercharged": false,
       "bands": [],

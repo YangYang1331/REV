@@ -35,8 +35,11 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
     // 始终把内置「电子/概念车」兜底放最后。
     if (!packs.any((p) => p.id == 'synth')) {
       packs.add(const EnginePackManifest(
-          id: 'synth', name: '电子 / 概念车', synthOnly: true, bands: []));
+          id: 'synth', name: '合成引擎 · 可调', synthOnly: true, bands: []));
     }
+    // 已下线的包（如旧的视频巡航包）被持久化过 → 归位到合成引擎，
+    // 避免页面显示一个不存在的选中项、调教面板也被判成不生效。
+    if (!packs.any((p) => p.id == _selected)) _selected = 'synth';
     if (!mounted) return;
     setState(() {
       _packs = packs;
@@ -46,8 +49,11 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
 
   String _subtitle(EnginePackManifest p) {
     final tags = <String>[];
-    if (p.id.startsWith('video_')) tags.add('视频采样');
-    if (p.synthOnly) tags.add('实时合成');
+    if (p.synthOnly) {
+      tags.add('实时合成');
+    } else {
+      tags.add(p.id.startsWith('video_') ? '视频采样' : '真实录音');
+    }
     if (p.turbo) tags.add('涡轮');
     if (p.supercharged) tags.add('机增');
     if (p.hasPop) tags.add('放炮');
@@ -141,17 +147,17 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Text('合成引擎',
+              Text('合成引擎调教',
                   style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                       fontSize: 13)),
-              const Spacer(),
+              Spacer(),
               Text(
-                _selected == 'synth' ? '当前生效' : '选「电子/概念车」时生效',
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                '仅对合成引擎生效',
+                style: TextStyle(color: Colors.white38, fontSize: 10),
               ),
             ],
           ),
@@ -251,11 +257,12 @@ class _EnginePackScreenState extends State<EnginePackScreen> {
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Text(
-                    '点选即试听真实怠速声 2 秒；选择在仪表盘内实时生效。',
+                    '点选即试听 2 秒；选择在仪表盘内实时生效。\n'
+                    '真实录音包会随转速连续变调；「合成引擎」可按下方参数调教。',
                     style: TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                 ),
-                _tuningCard(),
+                if (_selected == 'synth') _tuningCard(),
                 for (final g in order)
                   if (groups.containsKey(g)) ...[
                     Padding(

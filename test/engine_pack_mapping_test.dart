@@ -171,6 +171,53 @@ void main() {
     expect(p.id, 'mazda6_na');
     expect(p.hasPop, true);
     expect(p.synthOnly, false);
+    // v2.17.7 新增字段的默认值。
+    expect(p.core, 'idle');
+    expect(p.toneHz, 9000);
+  });
+
+  group('核心循环变调曲线（v2.17.7）', () {
+    test('转速升高 → 倍速单调升高（能听出转速变化）', () {
+      for (final core in ['idle', 'low', 'mid']) {
+        var prev = 0.0;
+        for (var rpm = 800.0; rpm <= 6500; rpm += 200) {
+          final s = corePlaySpeed(
+              coreBand: core, rpm: rpm, idleRpm: 800, redlineRpm: 6500);
+          expect(s, greaterThanOrEqualTo(prev - 1e-9), reason: '$core $rpm');
+          prev = s;
+        }
+      }
+    });
+
+    test('倍速范围受控：怠速 ≥0.65，红线 ≤1.85', () {
+      for (final core in ['idle', 'low', 'mid']) {
+        final lo = corePlaySpeed(
+            coreBand: core, rpm: 800, idleRpm: 800, redlineRpm: 6500);
+        final hi = corePlaySpeed(
+            coreBand: core, rpm: 6500, idleRpm: 800, redlineRpm: 6500);
+        expect(lo, greaterThanOrEqualTo(0.65));
+        expect(hi, lessThanOrEqualTo(1.86));
+        // 怠速→红线至少升 70%，确保明显可闻。
+        expect(hi / lo, greaterThan(1.7));
+      }
+    });
+
+    test('核心段对应转速处倍速≈1.0', () {
+      expect(
+          corePlaySpeed(
+              coreBand: 'idle', rpm: 800, idleRpm: 800, redlineRpm: 6500),
+          closeTo(1.0, 1e-9));
+      expect(
+          corePlaySpeed(
+              coreBand: 'low', rpm: 800 + 5700 * 0.25, idleRpm: 800,
+              redlineRpm: 6500),
+          closeTo(1.0, 1e-9));
+      expect(
+          corePlaySpeed(
+              coreBand: 'mid', rpm: 800 + 5700 * 0.55, idleRpm: 800,
+              redlineRpm: 6500),
+          closeTo(1.0, 1e-9));
+    });
   });
 
   group('冷启动包解析（v2.13.0 bug 修复回归）', () {

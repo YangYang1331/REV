@@ -18,6 +18,8 @@ class EnginePackManifest {
     this.hasBlowoff = false,
     this.hasWhine = false,
     this.synthOnly = false,
+    this.core = 'idle',
+    this.toneHz = 9000,
   });
 
   final String id;
@@ -40,6 +42,13 @@ class EnginePackManifest {
   /// 仅合成（即 "synth" 包本身，无采样文件）。
   final bool synthOnly;
 
+  /// 主循环段（v2.17.7）：每包只播这一段，靠连续变调跟随转速，
+  /// 不再多段交叉淡化（多段是同一段录音的重复，叠播会产生梳状/合唱感）。
+  final String core;
+
+  /// 采样音色低通截止（Hz）：录音本身的高频嘶声/风噪在这里收掉。
+  final double toneHz;
+
   static EnginePackManifest fromJson(Map<String, dynamic> j) =>
       EnginePackManifest(
         id: j['id']?.toString() ?? '',
@@ -53,6 +62,10 @@ class EnginePackManifest {
         hasBlowoff: j['hasBlowoff'] == true,
         hasWhine: j['hasWhine'] == true,
         synthOnly: j['synthOnly'] == true,
+        core: (j['core']?.toString().trim().isNotEmpty ?? false)
+            ? j['core'].toString()
+            : 'idle',
+        toneHz: (j['toneHz'] as num?)?.toDouble() ?? 9000,
       );
 }
 
@@ -147,6 +160,31 @@ class EngineBandPlanner {
     if (band == 'idle') return 1.0 + pos * 0.06;
     return 1.0 + pos * 0.20;
   }
+}
+
+/// 采样包核心循环的播放倍速（v2.17.7）。
+///
+/// 每个包只播一段核心录音，录音自身所在转速带（[coreBand] = idle/low/mid）
+/// 对应倍速 1.0；怠速时按带位下调、红线时升到 1.85 倍。
+/// 曲线单调递增，保证「转速越高音调越尖」听得出来，且不出现极端变调。
+double corePlaySpeed({
+  required String coreBand,
+  required double rpm,
+  required double idleRpm,
+  required double redlineRpm,
+}) {
+  final span = (redlineRpm - idleRpm).abs();
+  final t = span <= 0 ? 0.0 : ((rpm - idleRpm) / span).clamp(0.0, 1.0);
+  final tCore = switch (coreBand) {
+    'low' => 0.25,
+    'mid' => 0.55,
+    _ => 0.0,
+  };
+  final idleSpeed = 1.0 - 0.32 * (tCore / 0.55);
+  if (t <= tCore) {
+    return tCore <= 0 ? 1.0 : idleSpeed + (1.0 - idleSpeed) * (t / tCore);
+  }
+  return 1.0 + 0.85 * ((t - tCore) / (1.0 - tCore));
 }
 
 /// 本帧该播哪几个 one-shot（放炮/泄压/机增啸叫）。
@@ -257,7 +295,7 @@ EnginePackManifest resolveEnginePack(
     if (p.id == packId) return p;
   }
   return const EnginePackManifest(
-      id: 'synth', name: '电子/概念车', synthOnly: true);
+      id: 'synth', name: '合成引擎 · 可调', synthOnly: true);
 }
 
 /// 采样包分类（选择页分组用）。
@@ -276,5 +314,5 @@ String enginePackGroupLabel(EnginePackGroup g) => switch (g) {
       EnginePackGroup.turbo => '涡轮增压',
       EnginePackGroup.supercharged => '机械增压',
       EnginePackGroup.rotary => '转子',
-      EnginePackGroup.synth => '电子 / 概念',
+      EnginePackGroup.synth => '合成引擎（可调）',
     };

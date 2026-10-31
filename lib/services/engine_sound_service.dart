@@ -82,17 +82,18 @@ class EngineSoundService {
   List<EnginePackManifest> _packs = [];
   String _packId = 'synth';
   EnginePackManifest? _activePack;
-  final EngineBandPlanner _planner = const EngineBandPlanner();
   EngineOneShotDecider? _decider;
   double _lastRpmForRate = 0;
   int _lastRpmAt = 0;
   double _drpmSmoothed = 0;
 
-  /// band 循环源/句柄/平滑权重（key = band id）。
+  /// 主循环源/句柄（v2.17.7：每个包只播一段核心录音，
+  /// 用连续变调跟随转速，避免多段重复录音叠加的梳状滤波/合唱感）。
   final Map<String, AudioSource> _loopSources = {};
-  final Map<String, SoundHandle> _loopHandles = {};
-  final Map<String, double> _smoothWeights = {};
-  final Map<String, double> _smoothSpeeds = {};
+  SoundHandle? _coreHandle;
+  String _coreBand = 'idle';
+  double _coreSpeed = 1.0;
+  SoundHandle? _previewHandle; // 设置页试听句柄（连点新包时先停上一个）
 
   /// 用户音质档位（auto/high/low），start() 时从 prefs 读。
   AudioQuality _audioQuality = AudioQuality.auto;
@@ -217,7 +218,7 @@ class EngineSoundService {
 
   AudioQuality get audioQuality => _audioQuality;
 
-  /// 设置页试听：播放该包怠速循环 2 秒后自动停（不影响仪表盘运行态）。
+  /// 设置页试听：播放该包核心循环 2 秒后自动停（不影响仪表盘运行态）。
   Future<void> previewPack(String id) async {
     try {
       await _ensureSoloud();
@@ -226,10 +227,33 @@ class EngineSoundService {
           variant: _buildVariant,
           is32bit: _is32BitProcess(),
           quality: _audioQuality);
+      var core = 'idle';
+      for (final p in _packs) {
+        if (p.id == id) {
+          core = p.core;
+          break;
+        }
+      }
       final src = await SoLoud.instance
-          .loadAsset('assets/audio/packs/$id/$bit/loop_idle.flac');
-      final h = _bus?.play(src, volume: 0.5, looping: true);
-      await Future.delayed(const Duration(seconds: 2));
+          .loadAsset('assets/audio/packs/$id/$bit/loop_$core.flac');
+      final prev = _previewHandle;
+      if (prev != null) {
+        try {
+          SoLoud.instance.stop(prev);
+        } catch (_) {}
+      }
+      final h = _bus?.play(src, volume: 0.7, looping: true);
+      _previewHandle = h;
+      // 2 秒内把倍速从 0.85 拉到 1.45：试听时能直接听出「转速升高→音调变尖」。
+      for (var i = 0; i < 40; i++) {
+        if (h != null) {
+          try {
+            SoLoud.instance
+                .setRelativePlaySpeed(h, 0.85 + 0.60 * (i / 39.0));
+          } catch (_) {}
+        }
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
       if (h != null) SoLoud.instance.stop(h);
       await SoLoud.instance.disposeSource(src);
     } catch (e) {
@@ -435,11 +459,10 @@ class EngineSoundService {
     _fadeTarget = 0;
     // 给一点淡出时间（200ms），再真正停。
     await Future.delayed(const Duration(milliseconds: 220));
-    // 先把各采样循环音量归零（淡出窗口结束时确保无声）。
+    // 先把主循环音量归零（淡出窗口结束时确保无声）。
     try {
-      for (final h in _loopHandles.values) {
-        SoLoud.instance.setVolume(h, 0.0);
-      }
+      final h = _coreHandle;
+      if (h != null) SoLoud.instance.setVolume(h, 0.0);
     } catch (_) {}
     try {
       for (final v in _voices) {
@@ -448,10 +471,14 @@ class EngineSoundService {
       if (_noiseSource != null) SoLoud.instance.stopAudioSource(_noiseSource!);
     } catch (_) {}
     _voicesRunning = false;
-    // 停掉所有采样循环句柄（不关开关就不再响）；源不 dispose，便于快速重开。
+    // 停掉采样循环句柄（不关开关就不再响）；源不 dispose，便于快速重开。
     try {
-      for (final h in _loopHandles.values) {
-        SoLoud.instance.stop(h);
+      final h = _coreHandle;
+      if (h != null) SoLoud.instance.stop(h);
+      final p = _previewHandle;
+      if (p != null) {
+        SoLoud.instance.stop(p);
+        _previewHandle = null;
       }
     } catch (_) {}
     try {
@@ -618,14 +645,17 @@ class EngineSoundService {
     }
   }
 
-  /// 装载采样包 5 段循环 + one-shot。任何一段失败仅跳过该段；
-  /// hi 档加载失败自动回退 lo 档再试一次，任何档都不能静默无声。
+  /// 装载采样包核心循环 + one-shot（v2.17.7）。
+  ///
+  /// 只播一段核心录音，转速变化由连续变调（setRelativePlaySpeed）负责。
+  /// 旧版四段交叉淡化在同一段录音的重复副本之间切换，会叠出梳状滤波/
+  /// 合唱感，而且 ±20% 的变调几乎听不出转速变化——这是用户反馈「声浪
+  /// 不随转速变、听起来怪异」的根因。
   Future<void> _loadSampleSourcesLocked(EnginePackManifest pack) async {
     final soloud = SoLoud.instance;
-    // 采样包是成品录音：把 bus 低通全开，避免继承合成模式上次的截止频率；
+    // 采样包是成品录音：低通交给 [pack.toneHz]（pump 每帧下发），
     // 同时关掉合成用的波形整形（颗粒感），录音本身不该被再失真一遍。
     try {
-      _bus?.filters.biquadFilter.frequency().value = 16000;
       _bus?.filters.waveShaperFilter.deactivate();
     } catch (_) {}
 
@@ -645,16 +675,23 @@ class EngineSoundService {
       }
     }
 
-    final bands = <String>['idle', 'low', 'mid', 'high', 'bounce'];
-    for (final band in bands) {
-      if (!pack.bands.contains(band)) continue;
+    // 优先 manifest 指定的 core；失败再按时长/常用段依次兜底。
+    final candidates = <String>{
+      pack.core,
+      'idle',
+      'low',
+      'mid',
+      'high',
+    }.toList();
+    for (final band in candidates) {
       try {
         final src = await loadBand('loop_$band.flac');
         final h = _bus!.play(src, volume: 0.0001, looping: true);
         _loopSources[band] = src;
-        _loopHandles[band] = h;
-        _smoothWeights[band] = 0;
-        _smoothSpeeds[band] = 1.0;
+        _coreBand = band;
+        _coreHandle = h;
+        _coreSpeed = 1.0;
+        break;
       } catch (e) {
         debugPrint('load loop $band failed (ignored): $e');
       }
@@ -686,11 +723,17 @@ class EngineSoundService {
   Future<void> _unloadSampleSources() async {
     // 切换包/回收：先停旧句柄，杜绝残留叠音。
     try {
-      for (final h in _loopHandles.values) {
-        SoLoud.instance.stop(h);
+      final h = _coreHandle;
+      if (h != null) SoLoud.instance.stop(h);
+      final p = _previewHandle;
+      if (p != null) {
+        SoLoud.instance.stop(p);
+        _previewHandle = null;
       }
     } catch (_) {}
-    _loopHandles.clear();
+    _coreHandle = null;
+    _coreBand = 'idle';
+    _coreSpeed = 1.0;
     try {
       for (final s in _loopSources.values) {
         await SoLoud.instance.disposeSource(s);
@@ -700,8 +743,6 @@ class EngineSoundService {
       }
     } catch (_) {}
     _loopSources.clear();
-    _smoothWeights.clear();
-    _smoothSpeeds.clear();
     _oneShotSources.clear();
     // 合成源也一并回收，避免双路叠音。
     try {
@@ -760,48 +801,42 @@ class EngineSoundService {
       final duck = _ducking ? 0.18 : 1.0;
       final master = params.masterGain * _fade * duck;
 
-      // 母线低通：随负荷与转速抬升，采样包与合成共用同一条物理曲线。
-      try {
-        _bus?.filters.biquadFilter.frequency().value = params.busCutoffHz;
-      } catch (_) {}
-
       if (_useSamplePack) {
-        // 采样包模式：band 权重 50ms 平滑后下发各循环音量；
-        // 同时按 band 内连续变调（setRelativePlaySpeed）让转速同步变尖。
-        final w =
-            _planner.plan(_pendingRpm, _mapper!.idleRpm, _mapper!.redlineRpm);
-        final bounce =
-            _planner.bounceWeight(_drpmSmoothed, _pendingRpm, _mapper!.idleRpm);
-        final span = (_mapper!.redlineRpm - _mapper!.idleRpm).abs();
-        final t = span <= 0.0
-            ? 0.0
-            : ((_pendingRpm - _mapper!.idleRpm) / span).clamp(0.0, 1.0);
-        for (final band in const ['idle', 'low', 'mid', 'high', 'bounce']) {
-          final handle = _loopHandles[band];
-          if (handle == null) continue;
-          var target = w[band];
-          if (band == 'bounce') target = bounce;
-          final cur = (_smoothWeights[band] ?? 0.0) +
-              (target - (_smoothWeights[band] ?? 0.0)) * 0.25;
-          _smoothWeights[band] = cur;
-          // 等功率交叉淡化：相邻两段各取 sqrt，交叉点总功率恒定不塌陷。
+        // 采样包模式（v2.17.7）：单段核心录音 + 连续变调。
+        //
+        // 旧版四段权重交叉淡化 + ±20% 变调有两个硬伤：
+        //  1) 四段其实是同一段录音的重复副本，叠播会有梳状滤波/合唱感；
+        //  2) ±20% 几乎听不出转速变化。
+        // 现在以核心段自身的录音转速为锚点（idle/low/mid），
+        // 用分段线性曲线把怠速→红线映射到 0.68~1.85 倍速，
+        // 转速越高音调越尖，且只有一个声源，不会互相干扰。
+        final targetSpeed = corePlaySpeed(
+          coreBand: _coreBand,
+          rpm: _pendingRpm,
+          idleRpm: _mapper!.idleRpm,
+          redlineRpm: _mapper!.redlineRpm,
+        );
+        _coreSpeed += (targetSpeed - _coreSpeed) * 0.15;
+        final handle = _coreHandle;
+        if (handle != null) {
           try {
-            SoLoud.instance.setVolume(
-                handle,
-                (math.sqrt(cur.clamp(0.0, 1.0)) * _fade * duck * 0.85)
-                    .clamp(0.0, 1.0));
-          } catch (_) {}
-          // band 内连续变调（0.2 系数平滑防拉链）。
-          final targetSpeed = _planner.bandPlaySpeed(band: band, t: t);
-          final spd = (_smoothSpeeds[band] ?? 1.0) +
-              (targetSpeed - (_smoothSpeeds[band] ?? 1.0)) * 0.2;
-          _smoothSpeeds[band] = spd;
-          try {
-            SoLoud.instance.setRelativePlaySpeed(handle, spd);
+            SoLoud.instance.setRelativePlaySpeed(handle, _coreSpeed);
+            SoLoud.instance
+                .setVolume(handle, (master * 1.35).clamp(0.0, 0.98));
           } catch (_) {}
         }
+        // 录音里的高频嘶声/风噪按包声明收掉；负荷大时轻微放开保持通透。
+        final tone = _activePack!.toneHz * (0.92 + 0.18 * _pendingLoad);
+        try {
+          _bus?.filters.biquadFilter.frequency().value =
+              tone.clamp(4000.0, 12000.0);
+        } catch (_) {}
       } else if (_soloudReady && _voicesRunning) {
         final soloud = SoLoud.instance;
+        // 合成模式：排气脉冲的高频含量随负荷与转速抬升。
+        try {
+          _bus?.filters.biquadFilter.frequency().value = params.busCutoffHz;
+        } catch (_) {}
         // 颗粒量随调音实时变化（合成专属，采样模式该滤波器已停用）。
         try {
           final ws = _bus?.filters.waveShaperFilter;

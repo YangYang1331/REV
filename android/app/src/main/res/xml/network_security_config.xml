@@ -18,8 +18,6 @@
          （Flutter dart:io 的 raw socket OBD 串口本就不受 NSC 限制，这里主要兜住
           极少数走 http:// 的本地调试服务器。） -->
     <domain-config cleartextTrafficPermitted="true">
-        <!-- 自用云服务器（公网 IP，HTTP 直连；自用构建经 dart-define 注入） -->
-        <domain includeSubdomains="false">139.224.30.235</domain>
         <!-- 本地 OBD / ELM327 WiFi 网关 -->
         <domain includeSubdomains="false">192.168.0.10</domain>
         <domain includeSubdomains="false">192.168.0.123</domain>

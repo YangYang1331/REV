@@ -1,7 +1,7 @@
 name: obd_dashboard
 description: REV — 车机 OBD 实时仪表盘（十套皮肤 · 账号体系 · 车队看板 · 马力曲线/电池健康/故障码/圈速/多页面/前台保活）
 publish_to: "none"
-version: 2.17.3+57
+version: 2.17.4+58
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -35,6 +35,8 @@ dependencies:
   # 应用内更新下载 / 安装
   path_provider: ^2.1.4
   open_filex: ^4.5.0
+  # 更新包完整性校验（SHA-256）
+  crypto: ^3.0.3
 
   # 音效反馈（连接成功 / 告警）
   audioplayers: ^6.1.0

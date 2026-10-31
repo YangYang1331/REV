@@ -1,6 +1,6 @@
 // 上报地址规范化 / 404 自愈单元测试。
 // 背景：用户把云服务器地址填成 http://139.224.30.235/c/api/v1/report，
-// 上报一直 404，看板永远 NO SIGNAL。
+// 上报一直 404，看板永远 NO SIGNAL。v2.17.4 起公网地址强制 HTTPS。
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:obd_dashboard/services/cloud_service.dart';
@@ -9,29 +9,28 @@ void main() {
   group('normalizeEndpoint', () {
     test('只有主机：补协议 + 补标准上报路径', () {
       expect(CloudService.normalizeEndpoint('139.224.30.235'),
-          'http://139.224.30.235/api/v1/report');
+          'https://139.224.30.235/api/v1/report');
       expect(CloudService.normalizeEndpoint('  mayangyang.eu.cc/  '),
           'https://mayangyang.eu.cc/api/v1/report');
     });
 
-    test('裸域名默认 HTTPS；裸公网 IP / 内网地址保持 HTTP', () {
-      // 域名有证书可走（Let's Encrypt 等），优先加密。
+    test('公网一律 HTTPS；内网地址保持 HTTP', () {
       expect(CloudService.normalizeEndpoint('car.example.com'),
           'https://car.example.com/api/v1/report');
-      // 公网 IP 通常没有证书，硬升 https 会直接连不上。
+      // 公网裸 IP 也强制 HTTPS：token / 轨迹不能明文跑公网。
       expect(CloudService.normalizeEndpoint('8.8.8.8:8080'),
-          'http://8.8.8.8:8080/api/v1/report');
+          'https://8.8.8.8:8080/api/v1/report');
       for (final h in ['192.168.1.9', '10.0.0.5', 'localhost', 'rev.lan']) {
         expect(CloudService.normalizeEndpoint('$h:8080/api/v1/report'),
             startsWith('http://'));
       }
     });
 
-    test('显式 http + 域名 → 自动升级 https（仅域名，不动 IP/内网）', () {
+    test('显式 http → 公网升级 https，内网保留', () {
       expect(CloudService.normalizeEndpoint('http://car.example.com/api/v1/report'),
           'https://car.example.com/api/v1/report');
       expect(CloudService.normalizeEndpoint('http://139.224.30.235/api/v1/report'),
-          'http://139.224.30.235/api/v1/report');
+          'https://139.224.30.235/api/v1/report');
       expect(CloudService.normalizeEndpoint('http://192.168.0.10:8080/api/v1/report'),
           'http://192.168.0.10:8080/api/v1/report');
     });
@@ -39,11 +38,11 @@ void main() {
     test('带多余路径前缀也会补上 /api/v1/report', () {
       // 用户截图里的写法：/c 结尾（少了后面的路径）
       expect(CloudService.normalizeEndpoint('http://139.224.30.235/c'),
-          'http://139.224.30.235/c/api/v1/report');
+          'https://139.224.30.235/c/api/v1/report');
     });
 
     test('已经是规范地址则原样保留（幂等）', () {
-      const good = 'http://139.224.30.235/api/v1/report';
+      const good = 'https://139.224.30.235/api/v1/report';
       expect(CloudService.normalizeEndpoint(good), good);
       expect(CloudService.normalizeEndpoint('$good/'), good);
       expect(CloudService.normalizeEndpoint(CloudService.normalizeEndpoint(good)),

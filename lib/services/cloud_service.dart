@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -90,7 +91,7 @@ class CloudService {
     await AppStore.instance.setCloudUpload(v);
   }
 
-  /// 上报地址是否走公网明文 HTTP（域名强制 HTTPS，只有公网 IP 才会落到这里）。
+  /// 兼容旧配置：地址仍是公网明文 HTTP 时给设置页提示（新输入会强制升级 HTTPS）。
   bool get isPlaintextPublic {
     final u = Uri.tryParse(_endpoint);
     if (u == null || u.host.isEmpty) return false;
@@ -128,9 +129,18 @@ class CloudService {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_kEndpoint);
+    var saved = prefs.getString(_kEndpoint);
+    // v2.17.4 迁移：旧自用构建把地址存成了 http://139.224.30.235，
+    // 现在默认走 HTTPS 域名。只在当前构建确实以该域名为默认时迁移，
+    // 避免影响开源版/自建服务器的用户地址。
+    if (saved != null &&
+        saved.isNotEmpty &&
+        defaultEndpoint.startsWith('https://mayangyang.eu.cc') &&
+        _hostOf(saved) == '139.224.30.235') {
+      saved = defaultEndpoint;
+      await prefs.setString(_kEndpoint, saved);
+    }
     // 地址优先级：用户已填 > 自用构建注入的默认值 > 空（不自动上报）。
-    // 不做任何硬编码 IP/域名的迁移。
     _endpoint = (saved != null && saved.isNotEmpty)
         ? normalizeEndpoint(saved)
         : defaultEndpoint;
@@ -164,23 +174,22 @@ class CloudService {
   /// 就是 404（看板永远空白）。这里统一收敛成 `scheme://host[:port]/api/v1/report`；
   /// 已带 `/api/v1/xxx` 的保持原样，自建反代的子路径前缀不会被吃掉。
   ///
-  /// 协议强制：域名一律升级为 HTTPS（token 与行车轨迹不能明文跑公网）；
-  /// 只有 localhost / 内网段 / `.local` 保留 HTTP。公网裸 IP 保留 HTTP 但会在
-  /// 设置页标注"明文"，因为它通常没有匹配 IP 的证书，强升会让上报直接失败。
+  /// 协议强制：公网一律 HTTPS（token 与行车轨迹不能明文跑公网）；
+  /// 只有 localhost / 内网段 / `.local` 保留 HTTP（自建无证书的家庭服务器）。
   static String normalizeEndpoint(String raw) {
     var s = raw.trim();
     if (s.isEmpty) return s;
     final hasScheme = RegExp(r'^https?://', caseSensitive: false).hasMatch(s);
     if (!hasScheme) {
       final host = _hostOf(s);
-      // 裸域名优先走 HTTPS；裸 IP / 内网主机保持 HTTP（多为自建无证书）。
-      s = (_isIpv4(host) || isPrivateHost(host) ? 'http://' : 'https://') + s;
+      // 内网主机保持 HTTP；其余（含公网 IP）一律走 HTTPS。
+      s = (isPrivateHost(host) ? 'http://' : 'https://') + s;
     }
     s = s.replaceAll(RegExp(r'/+$'), '');
     final u = Uri.tryParse(s);
     if (u != null && u.host.isNotEmpty) {
       final isHttp = u.scheme.toLowerCase() == 'http';
-      if (isHttp && !isPrivateHost(u.host) && !_isIpv4(u.host)) {
+      if (isHttp && !isPrivateHost(u.host)) {
         s = 'https://${s.substring(s.indexOf('://') + 3)}';
       }
     }
@@ -193,9 +202,6 @@ class CloudService {
     final noScheme = s.contains('://') ? s.split('://').last : s;
     return noScheme.split(RegExp(r'[/?#]')).first.split(':').first;
   }
-
-  static bool _isIpv4(String host) =>
-      RegExp(r'^\d{1,3}(?:\.\d{1,3}){3}$').hasMatch(host);
 
   /// 内网 / 本机地址：这些允许明文 HTTP（自建家庭服务器、本机调试）。
   static bool isPrivateHost(String host) {
@@ -632,15 +638,22 @@ class CloudService {
   }
 
   /// 下载 APK 并触发安装，返回下载进度回调。
+  /// [expectedSha256] 来自服务器版本清单；非空时下载后会校验，不匹配立即删除并报错。
   /// 抛出异常时由 UI 给出"手动安装"指引。
   Future<void> downloadAndInstall(
     String apkUrl, {
     void Function(int percent)? onProgress,
+    String? expectedSha256,
   }) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     final Uri uri;
     try {
       uri = Uri.parse(apkUrl);
+      final scheme = uri.scheme.toLowerCase();
+      // 公网明文一律拒绝：防止更新包在链路上被替换。
+      if (scheme != 'https' && !(scheme == 'http' && isPrivateHost(uri.host))) {
+        throw StateError('更新地址必须是 HTTPS：$apkUrl');
+      }
       final req = await client.getUrl(uri);
       final resp = await req.close().timeout(const Duration(seconds: 60));
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -662,6 +675,16 @@ class CloudService {
       await sink.flush();
       await sink.close();
       client.close();
+      final want = (expectedSha256 ?? '').trim().toLowerCase();
+      if (want.isNotEmpty) {
+        final actual = await sha256OfFile(file);
+        if (actual != want) {
+          try {
+            await file.delete();
+          } catch (_) {}
+          throw StateError('安装包校验失败（SHA-256 不一致），已删除下载文件');
+        }
+      }
       final r = await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
       if (r.type != ResultType.done) {
         throw Exception('无法调起安装界面：${r.message}');
@@ -670,6 +693,18 @@ class CloudService {
       client.close();
       rethrow;
     }
+  }
+
+  /// 分块计算文件 SHA-256，避免把 80MB 安装包整体读进内存。
+  @visibleForTesting
+  static Future<String> sha256OfFile(File file) async {
+    final out = _DigestSink();
+    final input = crypto.sha256.startChunkedConversion(out);
+    await for (final chunk in file.openRead()) {
+      input.add(chunk);
+    }
+    input.close();
+    return out.value?.toString() ?? '';
   }
 
   double? _round(dynamic v, [int n = 1]) {
@@ -687,4 +722,15 @@ class CloudService {
     }
     return k;
   }
+}
+
+/// 收集 `startChunkedConversion` 输出的单个摘要。
+class _DigestSink implements Sink<crypto.Digest> {
+  crypto.Digest? value;
+
+  @override
+  void add(crypto.Digest data) => value = data;
+
+  @override
+  void close() {}
 }

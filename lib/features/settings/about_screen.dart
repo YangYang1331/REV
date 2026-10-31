@@ -252,6 +252,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     final name = rel['versionName'] ?? '';
     final notes = rel['notes'] ?? '';
     final apkUrl = rel['apkUrl'] ?? '';
+    final apkSha256 = (rel['apkSha256'] ?? '').toString();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -280,15 +281,19 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
                 return;
               }
               try {
-                await cloud.downloadAndInstall(apkUrl, onProgress: (p) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text('下载中 $p%'),
-                          duration: const Duration(milliseconds: 600)),
-                    );
-                  }
-                });
+                await cloud.downloadAndInstall(
+                  apkUrl,
+                  expectedSha256: apkSha256,
+                  onProgress: (p) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('下载中 $p%'),
+                            duration: const Duration(milliseconds: 600)),
+                      );
+                    }
+                  },
+                );
               } catch (e) {
                 if (!mounted) return;
                 showDialog<void>(

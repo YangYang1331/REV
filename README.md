@@ -1,10 +1,17 @@
-# REV — 车机 OBD 实时仪表盘（v2.17.3）
+# REV — 车机 OBD 实时仪表盘（v2.17.4）
 
 十套皮肤 · 26 套真实引擎采样声浪 · 账号体系与车队看板 · DTC 中文故障码 · 马力曲线 / 电池健康 / 圈速 / 前台保活。
-包名 `com.rev.cluster`，versionCode 57 / versionName 2.17.3。
+包名 `com.rev.cluster`，versionCode 58 / versionName 2.17.4。
 
 > 开源版默认不内置任何服务器地址（不连作者服务器）。请在设置里填写你自己部署的服务器地址，
 > 或用 `--dart-define=DEFAULT_BASE=... --dart-define=DEFAULT_ENDPOINT=...` 注入；详见 `OPENSOURCE_DEPLOY.md`。
+
+## v2.17.4 主要变更（安全加固）
+
+- **默认走 HTTPS**：自用构建的默认服务器改为 `https://mayangyang.eu.cc`；公网地址（含裸 IP）一律拒绝明文 HTTP，内网 OBD 网段除外。
+- **更新包校验**：版本清单新增 `apkSha256`，下载完成后分块计算 SHA-256，不匹配立即删除并报错，防止更新包被替换。
+- **关闭数据备份**：`android:allowBackup="false"`，避免 adb / 云备份带走登录 token 与车辆数据。
+- **服务端权限收紧**：`data/` 目录 700、`users/sessions/devices/history.json` 600，新写入自动生效。
 
 ## v2.17.3 主要变更（开屏观感修正）
 

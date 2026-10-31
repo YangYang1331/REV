@@ -1,5 +1,5 @@
 /*
- * REV 云端服务 v2.17.3（历史趋势 + 车队共享 + viewer 角色）
+ * REV 云端服务 v2.17.4（历史趋势 + 车队共享 + viewer 角色）
  * 零依赖 Node.js（v18+，仅内置 http/fs/path/crypto/https）
  *
  * v2.16.0 新增：
@@ -47,7 +47,17 @@ let historyDirty = false;
 
 /* ---------------- 持久化（容错，原子写） ---------------- */
 function ensureDataDir() {
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+    fs.chmodSync(DATA_DIR, 0o700);
+  } catch (e) {}
+}
+// 数据目录/文件只给服务账号读写：里面是账号口令哈希与 30 天会话 token。
+function secureDataFiles() {
+  ensureDataDir();
+  for (const fp of [USERS_FILE, SESSIONS_FILE, DEVICES_FILE, HISTORY_FILE]) {
+    try { if (fs.existsSync(fp)) fs.chmodSync(fp, 0o600); } catch (e) {}
+  }
 }
 function loadJson(fp, fallback) {
   try {
@@ -59,8 +69,9 @@ function writeJsonAtomic(fp, obj) {
   try {
     ensureDataDir();
     const tmp = fp + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, fp);
+    try { fs.chmodSync(fp, 0o600); } catch (e) {}
   } catch (e) { console.error('[persist]', fp, e.message); }
 }
 
@@ -69,6 +80,8 @@ let userList = loadJson(USERS_FILE, { users: [] }).users || [];
 let sessions = loadJson(SESSIONS_FILE, {});
 // Normalize old sessions without role
 for (const s of Object.values(sessions)) { if (s && !s.role) s.role = 'user'; }
+// 启动即收紧权限：旧版本可能把 data/*.json 留成 644。
+secureDataFiles();
 
 function persistUsers() { writeJsonAtomic(USERS_FILE, { users: userList }); }
 function persistSessions() { writeJsonAtomic(SESSIONS_FILE, sessions); }
@@ -391,8 +404,9 @@ function sweepDevices() {
 
 /* ---------------- 版本清单 ---------------- */
 const LATEST = {
-  versionCode: 57, versionName: '2.17.3',
-  notes: 'v2.17.3：开屏细节修正——REV 标题橙色高光改为只扫过字形（不再像一块色条盖住字母），收尾白闪亮度减半，夜间上车更不刺眼。v2.17.2：开屏动画升级——3D 透视镜头（开场推近转拉远 + 绕 Y 轴扫过）、Tron 透视网格地面、点火冲击波、HUD 四角框、字幕打字机与怠速指针微抖。v2.17.1：服务端同步；看板 no-store；检查更新失败明确报错。v2.17.0：P1 四项。①诊断解读升级：深度诊断与 PDF 报告里的故障码补充严重度 / 能否继续开 / 参考费用 / 自查三步；新增离线症状自查（22 类常见症状 → 疑似故障码，纯本机规则库，不联网不上传）。②油耗与用车账本：加油记录、满箱到满箱长期油耗 / 每公里油费 / 趋势，保养 / 保险 / 年检到期提醒。③多车车库：多辆车独立车型档案 + VIN 自动识别，行程与加油记录按车归属，列表可切「当前车 / 全部」。④行程导出补齐 GPX / KML，新增同路线历史对比与行程合并 / 拆分。',
+  versionCode: 58, versionName: '2.17.4',
+  apkSha256: '2f971ef8bd01addfd8cc7ce6823901372dec5faedd66c12688f6f80e05544966',
+  notes: 'v2.17.4：安全加固——生产包默认改走 HTTPS（mayangyang.eu.cc），公网明文 HTTP 一律拒绝；更新包安装前校验 SHA-256；关闭应用数据备份（allowBackup=false）；服务端 data 目录/文件收紧到 700/600。v2.17.3：开屏细节修正——REV 标题橙色高光改为只扫过字形（不再像一块色条盖住字母），收尾白闪亮度减半，夜间上车更不刺眼。v2.17.2：开屏动画升级——3D 透视镜头（开场推近转拉远 + 绕 Y 轴扫过）、Tron 透视网格地面、点火冲击波、HUD 四角框、字幕打字机与怠速指针微抖。v2.17.1：服务端同步；看板 no-store；检查更新失败明确报错。v2.17.0：P1 四项。①诊断解读升级：深度诊断与 PDF 报告里的故障码补充严重度 / 能否继续开 / 参考费用 / 自查三步；新增离线症状自查（22 类常见症状 → 疑似故障码，纯本机规则库，不联网不上传）。②油耗与用车账本：加油记录、满箱到满箱长期油耗 / 每公里油费 / 趋势，保养 / 保险 / 年检到期提醒。③多车车库：多辆车独立车型档案 + VIN 自动识别，行程与加油记录按车归属，列表可切「当前车 / 全部」。④行程导出补齐 GPX / KML，新增同路线历史对比与行程合并 / 拆分。',
 };
 
 /* ---------------- 静态下载表 ---------------- */
@@ -920,7 +934,7 @@ const server = http.createServer(handler);
 const server80 = http.createServer(handler);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`REV server v2.17.3 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
+  console.log(`REV server v2.17.4 listening on 0.0.0.0:${PORT} (auth + SSE + history + shares)`);
 });
 
 server80.on('error', (e) => {

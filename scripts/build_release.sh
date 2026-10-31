@@ -90,8 +90,8 @@ build_one() {
   flutter build apk --release \
     --target-platform "$platforms" \
     --dart-define=BUILD_VARIANT="$variant" \
-    --dart-define=DEFAULT_BASE="http://139.224.30.235" \
-    --dart-define=DEFAULT_ENDPOINT="http://139.224.30.235/api/v1/report" \
+    --dart-define=DEFAULT_BASE="https://mayangyang.eu.cc" \
+    --dart-define=DEFAULT_ENDPOINT="https://mayangyang.eu.cc/api/v1/report" \
     --obfuscate --split-debug-info="$PROJECT_DIR/$symdir"
   [ -f "$APK_OUT" ] || die "构建成功但找不到输出 APK: $APK_OUT"
   # 安全闸：拒绝 debug/profile 产物冒充 release

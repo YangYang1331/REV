@@ -11,6 +11,7 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'package:obd_dashboard/core/store/app_store.dart';
 import 'package:obd_dashboard/core/vehicle/engine_pack_mapping.dart';
+import 'package:obd_dashboard/core/vehicle/engine_profile.dart';
 import 'package:obd_dashboard/core/vehicle/engine_sound_mapping.dart';
 
 /// 一条振荡器声部：阶次 + 波形 + 播放句柄。
@@ -60,15 +61,22 @@ class EngineSoundService {
 
   // ---- SoLoud 对象 ----
   Bus? _bus;
+  /// 声部阶次固定为 [kEngineOrders]（7 路，2GB 车机可承受且不动态增减）。
   final List<_Voice> _voices = [
-    _Voice(order: 0.5, isSaw: false),
-    _Voice(order: 1.0, isSaw: false),
-    _Voice(order: 2.0, isSaw: true),
-    _Voice(order: 3.0, isSaw: true),
-    _Voice(order: 4.0, isSaw: true),
+    for (final order in kEngineOrders)
+      _Voice(order: order, isSaw: order >= 2.0),
   ];
   AudioSource? _noiseSource;
   SoundHandle? _noiseHandle;
+
+  /// 合成模式的回火/泄压 one-shot（运行时生成 PCM，零素材）。
+  final List<AudioSource> _synthPops = [];
+  AudioSource? _synthBlowoff;
+  final math.Random _shotRnd = math.Random();
+
+  /// 引擎型号与用户调音（合成模式生效）。
+  EngineProfile _profile = EngineProfile.i4;
+  EngineTuning _tuning = const EngineTuning();
 
   // ---- v2.11.0 多引擎采样包 ----
   List<EnginePackManifest> _packs = [];
@@ -116,10 +124,55 @@ class EngineSoundService {
       _packId = await AppStore.instance.getEnginePack();
       _audioQuality =
           parseAudioQuality(await AppStore.instance.getEngineAudioQuality());
+      _profile = EngineProfile.byId(
+          await AppStore.instance.getEngineProfileId());
+      _tuning = _decodeTuning(await AppStore.instance.getEngineTuning());
     } catch (_) {
       _prefEnabled = false;
       _packId = 'synth';
     }
+  }
+
+  EngineTuning _decodeTuning(String raw) {
+    if (raw.isEmpty) return const EngineTuning();
+    try {
+      final j = jsonDecode(raw);
+      if (j is Map<String, dynamic>) return EngineTuning.fromJson(j);
+      if (j is Map) return EngineTuning.fromJson(Map<String, dynamic>.from(j));
+    } catch (_) {}
+    return const EngineTuning();
+  }
+
+  /// 当前合成引擎档案（设置页显示/选择）。
+  EngineProfile get profile => _profile;
+  String get profileId => _profile.id;
+
+  /// 当前调音参数。
+  EngineTuning get tuning => _tuning;
+
+  /// 设置页切换引擎型号：持久化 + 热更新（采样包模式不影响）。
+  Future<void> setProfile(String id) async {
+    _profile = EngineProfile.byId(id);
+    _mapper?.setProfile(_profile);
+    try {
+      await AppStore.instance.setEngineProfileId(_profile.id);
+    } catch (_) {}
+  }
+
+  /// 设置页调音：持久化 + 热更新。
+  Future<void> setTuning(EngineTuning t) async {
+    _tuning = t.copyWith();
+    _mapper?.setTuning(_tuning);
+    try {
+      await AppStore.instance
+          .setEngineTuning(jsonEncode(_tuning.toJson()));
+    } catch (_) {}
+  }
+
+  /// 拖动滑块时的即时生效（不写盘，松手再 [setTuning] 持久化）。
+  void applyTuningLocal(EngineTuning t) {
+    _tuning = t.copyWith();
+    _mapper?.setTuning(_tuning);
   }
 
   /// 加载采样包 manifest（assets/audio/packs/manifest.json）。任何失败返回空列表。
@@ -211,9 +264,16 @@ class EngineSoundService {
     required double redlineRpm,
   }) async {
     _enteredDashboard = true;
-    _mapper = EngineSoundMapper(idleRpm: idleRpm, redlineRpm: redlineRpm);
+    _mapper = EngineSoundMapper(
+      idleRpm: idleRpm,
+      redlineRpm: redlineRpm,
+      profile: _profile,
+      tuning: _tuning,
+    );
     _life = EngineSoundLifeMachine(idleRpm: idleRpm);
     await _loadPref();
+    _mapper!.setProfile(_profile);
+    _mapper!.setTuning(_tuning);
     if (_prefEnabled) await start();
   }
 
@@ -264,22 +324,66 @@ class EngineSoundService {
         }
       }
       // one-shot 决策（放炮/泄压/机增）。
-      if (_useSamplePack && _decider != null && _activePack != null) {
+      final shotPack = _useSamplePack ? _activePack : _synthManifest;
+      if (_decider != null && shotPack != null) {
         for (final shot in _decider!.decide(
           rpm: rpm,
           drpmPerSec: drpmPerSec,
           nowMs: nowMs,
-          pack: _activePack!,
+          pack: shotPack,
         )) {
-          final src = _oneShotSources[shot.name];
-          if (src != null) {
-            try {
-              _bus?.play(src, volume: 0.7);
-            } catch (_) {}
+          if (_useSamplePack) {
+            final src = _oneShotSources[shot.name];
+            if (src != null) {
+              try {
+                _bus?.play(src,
+                    volume: (0.7 * _tuning.popAmount).clamp(0.0, 1.0));
+              } catch (_) {}
+            }
+          } else {
+            _playSynthShot(shot);
           }
         }
       }
     } catch (_) {}
+  }
+
+  /// 合成模式用的「伪 manifest」：把引擎档案翻译成回火/泄压触发条件，
+  /// 复用采样包同一套 [EngineOneShotDecider]，避免两套阈值各写一遍。
+  EnginePackManifest? get _synthManifest {
+    if (_tuning.popAmount <= 0.02) return null;
+    return EnginePackManifest(
+      id: 'synth',
+      name: _profile.name,
+      synthOnly: true,
+      bands: const [],
+      hasPop: _profile.hasPop,
+      turbo: _profile.hasBlowoff,
+      hasBlowoff: _profile.hasBlowoff,
+    );
+  }
+
+  /// 合成模式的回火/泄压：随机 15~85ms 延迟后触发，模拟真实放炮的不均匀。
+  void _playSynthShot(EngineOneShot shot) {
+    if (!_active || _bus == null) return;
+    final delayMs = 15 + _shotRnd.nextInt(70);
+    Timer(Duration(milliseconds: delayMs), () {
+      if (!_active || _bus == null) return;
+      try {
+        if (shot == EngineOneShot.pop) {
+          if (_synthPops.isEmpty) return;
+          final src = _synthPops[_shotRnd.nextInt(_synthPops.length)];
+          final vol =
+              (0.55 + 0.45 * _shotRnd.nextDouble()) * _tuning.popAmount;
+          _bus!.play(src, volume: vol.clamp(0.0, 1.0));
+        } else if (shot == EngineOneShot.blowoff) {
+          final src = _synthBlowoff;
+          if (src == null) return;
+          _bus!.play(src,
+              volume: (0.35 + 0.35 * _tuning.popAmount).clamp(0.0, 1.0));
+        }
+      } catch (_) {}
+    });
   }
 
   // ---- 启停 ----
@@ -361,6 +465,7 @@ class EngineSoundService {
 
   Future<void> _teardownSoloud() async {
     await _unloadSampleSources();
+    await _disposeSynthShots();
     try {
       for (final v in _voices) {
         if (v.source != null) {
@@ -388,10 +493,13 @@ class EngineSoundService {
     if (!_soloudReady || _voicesRunning || _bus == null) return;
     try {
       final soloud = SoLoud.instance;
+      final base = _mapper == null
+          ? 27.0
+          : _mapper!.profile.firingHz(_mapper!.idleRpm);
       for (final v in _voices) {
         if (v.source == null) continue;
         v.handle = _bus!.play(v.source!, volume: 0.0001);
-        soloud.setWaveformFreq(v.source!, 40 * v.order);
+        soloud.setWaveformFreq(v.source!, math.max(8.0, base * v.order));
       }
       if (_noiseSource != null) {
         _noiseHandle = _bus!.play(_noiseSource!, volume: 0.0001, looping: true);
@@ -426,6 +534,19 @@ class EngineSoundService {
         _bus!.filters.biquadFilter.frequency().value = 16000;
       } catch (e) {
         debugPrint('bus filter init failed (ignored): $e');
+      }
+      // 限幅器：合成叠加 7 路声部 + 噪声容易过载，统一在母线压住峰值。
+      try {
+        final lim = _bus!.filters.limiterFilter;
+        if (!lim.isActive) lim.activate();
+        lim.wet().value = 1.0;
+        lim.threshold().value = -6;
+        lim.outputCeiling().value = -1;
+        lim.kneeWidth().value = 3;
+        lim.releaseTime().value = 120;
+        lim.attackTime().value = 1;
+      } catch (e) {
+        debugPrint('bus limiter init failed (ignored): $e');
       }
       _soloudReady = true;
       return true;
@@ -478,6 +599,19 @@ class EngineSoundService {
         debugPrint('engine noise load failed (ignored): $e');
         _noiseSource = null;
       }
+      // 合成模式同样支持回火/泄压（运行时生成，不依赖采样包）。
+      _decider ??= EngineOneShotDecider();
+      await _ensureSynthShots();
+      // 颗粒感（波形整形）只作用于合成声浪；采样包是成品录音，保持干净。
+      try {
+        final ws = _bus!.filters.waveShaperFilter;
+        if (!ws.isActive) ws.activate();
+        ws.wet().value = 1.0;
+        ws.amount().value = (_tuning.grit * _profile.roughness * 0.85)
+            .clamp(0.0, 0.85);
+      } catch (e) {
+        debugPrint('bus waveshaper init failed (ignored): $e');
+      }
       _startVoicesLocked();
     } catch (e) {
       debugPrint('load synth sources failed (ignored): $e');
@@ -488,9 +622,11 @@ class EngineSoundService {
   /// hi 档加载失败自动回退 lo 档再试一次，任何档都不能静默无声。
   Future<void> _loadSampleSourcesLocked(EnginePackManifest pack) async {
     final soloud = SoLoud.instance;
-    // 采样包是成品录音：把 bus 低通全开，避免继承合成模式上次的截止频率。
+    // 采样包是成品录音：把 bus 低通全开，避免继承合成模式上次的截止频率；
+    // 同时关掉合成用的波形整形（颗粒感），录音本身不该被再失真一遍。
     try {
       _bus?.filters.biquadFilter.frequency().value = 16000;
+      _bus?.filters.waveShaperFilter.deactivate();
     } catch (_) {}
 
     /// 按当前档位加载某段资源；hi 失败自动降级 lo。
@@ -666,12 +802,21 @@ class EngineSoundService {
         }
       } else if (_soloudReady && _voicesRunning) {
         final soloud = SoLoud.instance;
+        // 颗粒量随调音实时变化（合成专属，采样模式该滤波器已停用）。
+        try {
+          final ws = _bus?.filters.waveShaperFilter;
+          if (ws != null && ws.isActive) {
+            ws.amount().value =
+                (params.grit * 0.85).clamp(0.0, 0.85);
+          }
+        } catch (_) {}
         for (final v in _voices) {
           if (v.source == null || (v.handle?.id ?? 0) <= 0) continue;
           final gain = params.harmonicGains[v.order] ?? 0.2;
           try {
             soloud.setWaveformFreq(v.source!, params.fundamentalHz * v.order);
-            soloud.setVolume(v.handle!, (gain * master * 0.5).clamp(0.0, 1.0));
+            soloud.setVolume(
+                v.handle!, (gain * master * 0.30).clamp(0.0, 1.0));
           } catch (_) {}
         }
         if (_noiseSource != null && (_noiseHandle?.id ?? 0) > 0) {
@@ -691,6 +836,88 @@ class EngineSoundService {
     } catch (e) {
       debugPrint('engine sound pump failed (ignored): $e');
     }
+  }
+
+  /// 合成模式 one-shot 源：运行时生成 PCM，加载一次常驻。
+  Future<void> _ensureSynthShots() async {
+    if (!_soloudReady) return;
+    try {
+      if (_synthPops.isEmpty) {
+        for (var i = 0; i < 3; i++) {
+          _synthPops.add(await SoLoud.instance
+              .loadMem('engine_pop_$i.wav', _makePopWav(i)));
+        }
+      }
+      if (_synthBlowoff == null) {
+        _synthBlowoff = await SoLoud.instance
+            .loadMem('engine_blowoff.wav', _makeBlowoffWav());
+      }
+    } catch (e) {
+      debugPrint('synth oneshot load failed (ignored): $e');
+    }
+  }
+
+  Future<void> _disposeSynthShots() async {
+    try {
+      for (final s in _synthPops) {
+        await SoLoud.instance.disposeSource(s);
+      }
+    } catch (_) {}
+    _synthPops.clear();
+    try {
+      final b = _synthBlowoff;
+      if (b != null) await SoLoud.instance.disposeSource(b);
+    } catch (_) {}
+    _synthBlowoff = null;
+  }
+
+  /// 程序化「回火放炮」：低频砰 + 破音噪声，三档音高/衰减。
+  /// 100% 本地合成，零版权素材；软削波模拟排气管过载。
+  Uint8List _makePopWav(int seed) {
+    const sr = 22050;
+    final dur = 0.13 + 0.03 * (seed % 3);
+    final n = (sr * dur).round();
+    final pcm = Int16List(n);
+    final rnd = math.Random(7000 + seed * 131);
+    final f0 = 95.0 + 25.0 * seed;
+    var phase = 0.0;
+    double lp = 0;
+    double lp2 = 0;
+    for (var i = 0; i < n; i++) {
+      final tt = i / sr;
+      final env = math.exp(-tt * (18.0 + seed * 4));
+      final burst = math.exp(-tt * 45.0);
+      final white = rnd.nextDouble() * 2 - 1;
+      lp = 0.55 * lp + 0.45 * white * burst;
+      lp2 = 0.86 * lp2 + 0.14 * white;
+      final thumpF = f0 * math.exp(-tt * 6.0);
+      phase += 2 * math.pi * thumpF / sr;
+      final thump = math.sin(phase) * env;
+      var s = (thump * 0.9 + lp * 0.75 + lp2 * 0.45) * 1.4;
+      s /= (1 + s.abs() * 0.6); // 软削波
+      pcm[i] = (s.clamp(-1.0, 1.0) * 32767).round();
+    }
+    return _wavFromPcm(pcm, sr);
+  }
+
+  /// 程序化「泄压阀」：高通噪声急衰减，短促嘶声。
+  Uint8List _makeBlowoffWav() {
+    const sr = 22050;
+    final n = (sr * 0.32).round();
+    final pcm = Int16List(n);
+    final rnd = math.Random(424242);
+    double lp = 0;
+    for (var i = 0; i < n; i++) {
+      final tt = i / sr;
+      final env = math.exp(-tt * 10.0) * (1 - math.exp(-tt * 80.0));
+      final white = rnd.nextDouble() * 2 - 1;
+      lp = 0.15 * lp + 0.85 * white;
+      final hp = white - lp;
+      var s = hp * env * 0.9;
+      s /= (1 + s.abs() * 0.4);
+      pcm[i] = (s.clamp(-1.0, 1.0) * 32767).round();
+    }
+    return _wavFromPcm(pcm, sr);
   }
 
   /// 本地程序化生成一小段低通噪声 wav（16-bit PCM mono 22050Hz，2s）。

@@ -1,23 +1,44 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:obd_dashboard/core/vehicle/engine_profile.dart';
 import 'package:obd_dashboard/core/vehicle/engine_sound_mapping.dart';
 
 void main() {
   group('EngineSoundMapper 基频公式', () {
-    test('怠速 800rpm ≈ 40Hz；红线 6500rpm 远高于怠速', () {
+    test('点火频率：怠速 800rpm（I4）≈26.7Hz；红线远高于怠速', () {
       final m = EngineSoundMapper(idleRpm: 800, redlineRpm: 6500);
       // 预热到稳定（平滑收敛）。
       for (var i = 0; i < 60; i++) {
         m.plan(800, 50);
       }
       final idle = m.plan(800, 50);
-      expect(idle.fundamentalHz, closeTo(40, 3));
+      // 四冲程四缸：800/60 × 2 = 26.67Hz（每转点火 2 次）。
+      expect(idle.fundamentalHz, closeTo(26.7, 1.0));
 
       m.reset();
       for (var i = 0; i < 120; i++) {
         m.plan(6500, 50);
       }
       final red = m.plan(6500, 50);
+      expect(red.fundamentalHz, closeTo(216.7, 3.0));
       expect(red.fundamentalHz, greaterThan(idle.fundamentalHz * 2.5));
+    });
+
+    test('不同引擎档案：点火频率随每转点火次数线性升高', () {
+      EngineSoundParams stable(EngineProfile p, double rpm) {
+        final m = EngineSoundMapper(
+            idleRpm: 800, redlineRpm: 8000, profile: p);
+        for (var i = 0; i < 120; i++) {
+          m.plan(rpm, 50);
+        }
+        return m.plan(rpm, 50);
+      }
+
+      // 800rpm：I4(2/转)=26.7、V8(4/转)=53.3、V12(6/转)=80、转子(6/转)=80。
+      expect(stable(EngineProfile.i4, 800).fundamentalHz, closeTo(26.7, 1.0));
+      expect(stable(EngineProfile.v8, 800).fundamentalHz, closeTo(53.3, 1.5));
+      expect(stable(EngineProfile.v12, 800).fundamentalHz, closeTo(80.0, 2.0));
+      expect(
+          stable(EngineProfile.rotary, 800).fundamentalHz, closeTo(80.0, 2.0));
     });
 
     test('rpm 被钳位：0 或超红区都不会炸参数', () {

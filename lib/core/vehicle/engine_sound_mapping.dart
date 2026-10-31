@@ -3,15 +3,18 @@
 /// 纯 Dart、不依赖任何音频插件，全部参数在此算好后由平台层
 /// （`EngineSoundService`）按约 50ms 节奏下发，杜绝拉链音/爆音。
 ///
-/// 设计依据（v2.10.0 评审通过的方案）：
-///  - 基频 f0 = 40 * pow(rpm/800, 1.2)：怠速 800rpm≈40Hz 低沉轰鸣；
-///  - 叠加 0.5x（次八度，低转加重）/1x/2x/3x/4x 谐波，高转抬升 2x/3x 做力度；
-///  - 一路噪声经低通，截止频率随 rpm 升高模拟排气；
-///  - rpm 快速下降（松油收油）时短暂压增益再回弹；
+/// v2.17.6 起基频改为物理点火频率（借鉴内燃机声浪原理）：
+///  - 四冲程 f_fire = rpm/60 × (缸数/2)，转速升高 → 点火更密 → 音调线性升高；
+///  - 谐波取 [kEngineOrders]（0.5x 半阶 … 8x），怠速/高转两套权重按
+///    引擎档案（[EngineProfile]）插值，V8 半阶重、V10 高阶亮、转子持续啸叫；
+///  - 用户调音（[EngineTuning]）在权重上再叠亮度 / 低频厚度；
+///  - 一路噪声经低通，截止频率随 rpm 与负荷升高模拟排气气流；
+///  - 松油（rpm 快速下降）压增益形成回弹包络，配合回火放炮；
 ///  - 怠速（rpm≈idle、车停着但没熄火）也要有持续低沉轰鸣，全程连续不中断。
 library;
 
-import 'dart:math' as math;
+import 'package:obd_dashboard/core/vehicle/engine_profile.dart';
+
 class EngineSoundParams {
   const EngineSoundParams({
     required this.fundamentalHz,
@@ -22,12 +25,14 @@ class EngineSoundParams {
     required this.rpmSmoothed,
     this.busCutoffHz = 16000,
     this.load = 0,
+    this.grit = 0,
+    this.engineId = 'i4',
   });
 
-  /// 基频（Hz）。平台层各谐波声部频率 = f0 × 阶次。
+  /// 基频（Hz）= 点火频率。平台层各谐波声部频率 = f0 × 阶次。
   final double fundamentalHz;
 
-  /// 阶次（0.5 / 1 / 2 / 3 / 4）→ 增益（0..1）。
+  /// 阶次（0.5 / 1 / 2 / 3 / 4 / 6 / 8）→ 增益（0..1）。
   final Map<double, double> harmonicGains;
 
   /// 排气噪声层增益（0..1，含电平分量）。
@@ -47,16 +52,23 @@ class EngineSoundParams {
 
   /// 平滑后的负荷（0..1），仅作调试/显示。
   final double load;
+
+  /// 颗粒/失真量（0..1）= 用户 grit × 引擎粗糙度，平台层据此驱动波形整形。
+  final double grit;
+
+  /// 当前引擎档案 id（调试/UI 显示）。
+  final String engineId;
 }
 
 class EngineSoundMapper {
   EngineSoundMapper({
     required this.idleRpm,
     required this.redlineRpm,
-    this.baseFreqHz = 40.0,
-    this.freqPower = 1.2,
+    EngineProfile? profile,
+    EngineTuning tuning = const EngineTuning(),
     this.smoothTauMs = 50.0,
-  }) {
+  })  : profile = profile ?? EngineProfile.i4,
+        _tuning = tuning {
     _smoothRpm = idleRpm.toDouble();
   }
 
@@ -66,28 +78,40 @@ class EngineSoundMapper {
   /// 红线转速（马6≈6500）。
   final double redlineRpm;
 
-  /// 怠速基频（Hz）。
-  final double baseFreqHz;
-
-  /// 频率指数：f0 = baseFreq * pow(rpm/idleRpm, power)。
-  final double freqPower;
+  /// 引擎档案（缸数/点火次数/谐波性格）。
+  EngineProfile profile;
 
   /// rpm 指数平滑时间常数（ms）。
   final double smoothTauMs;
 
+  EngineTuning _tuning;
+  EngineTuning get tuning => _tuning;
+
   late double _smoothRpm;
   double _coastDip = 0; // 松油压幅 0..1，回弹由平滑保证。
+  double _prevLoad = 0;
+  double _tipIn = 0; // 油门变化率带来的瞬态冲击 0..1
+
+  void setProfile(EngineProfile p) {
+    profile = p;
+  }
+
+  void setTuning(EngineTuning t) {
+    _tuning = t;
+  }
 
   /// 重置（进入/离开时调用）。
   void reset() {
     _smoothRpm = idleRpm;
     _coastDip = 0;
+    _prevLoad = 0;
+    _tipIn = 0;
   }
 
   /// 喂入一帧 rpm，算出全部发声参数。[dtMs] 本帧距上帧毫秒数。
   ///
-  /// 物理依据：排气脉冲基频 f = rpm/60 × (缸数/2)，音高只由转速决定；
-  /// [load]（节气门/负荷 0..1）只改变脉冲强度与高频含量，
+  /// 物理依据：点火频率 f = rpm/60 × 每转点火次数，音高只由转速决定；
+  /// [load]（节气门/负荷 0..1）改变脉冲强度与高频含量、并带来踩油瞬态，
   /// [gear]（挡位，0=未知）只用于低速高挡的「闷音」判断。
   EngineSoundParams plan(double rpm, double dtMs,
       {double load = 0, int gear = 0}) {
@@ -100,64 +124,81 @@ class EngineSoundMapper {
     _smoothRpm += (clamped - _smoothRpm) * alpha;
 
     // 3) 归一化转带 0..1：idle→0，redline→1。
-    var t = (_smoothRpm - idleRpm) / (redlineRpm - idleRpm);
+    final span = (redlineRpm - idleRpm).abs();
+    var t = span <= 0 ? 0.0 : (_smoothRpm - idleRpm) / span;
     t = t.clamp(0.0, 1.0);
 
-    // 4) 基频（评审公式）。
-    final f0 = baseFreqHz *
-        math.pow(_smoothRpm / idleRpm, freqPower).toDouble();
+    // 4) 基频 = 点火频率（物理），非法值兜底。
+    var f0 = profile.firingHz(_smoothRpm);
+    if (!f0.isFinite || f0 <= 0) f0 = profile.firingHz(idleRpm);
 
-    // 5) 谐波增益：低转加重 0.5x 次八度轰鸣；高转抬 2x/3x/4x 出力度。
-    double lerp(double a, double b) => a + (b - a) * t;
+    // 5) 负荷瞬态：猛踩油门（load 快速上升）给一瞬间的冲击与高频。
     final loadN = load.isFinite ? load.clamp(0.0, 1.0) : 0.0;
-    // 低速高挡（拖挡）时排气脉冲间隔变长、声音发闷：抬低频、压高频。
-    final lug = gear >= 4
-        ? (1.0 - (_smoothRpm / (idleRpm * 1.9))).clamp(0.0, 1.0)
-        : gear == 3
-            ? (1.0 - (_smoothRpm / (idleRpm * 1.6))).clamp(0.0, 1.0) * 0.6
-            : 0.0;
-    final hiTilt = 0.80 + 0.45 * loadN - 0.25 * lug;
-    final loTilt = 1.0 + 0.28 * lug - 0.06 * loadN;
-    final harmonics = <double, double>{
-      0.5: lerp(0.95, 0.30) * loTilt, // 次八度：怠速轰鸣主力，高转退
-      1.0: lerp(0.55, 0.65) * loTilt,
-      2.0: lerp(0.30, 0.90) * hiTilt,
-      3.0: lerp(0.14, 0.85) * hiTilt,
-      4.0: lerp(0.04, 0.45) * hiTilt,
-    };
+    final dLoad = (loadN - _prevLoad).clamp(-1.0, 1.0);
+    _prevLoad = loadN;
+    final tipTarget = dLoad > 0 ? (dLoad * 6.0).clamp(0.0, 1.0) : 0.0;
+    _tipIn += (tipTarget - _tipIn) * (tipTarget > _tipIn ? 0.35 : 0.10);
 
-    // 6) 排气噪声：电平随 rpm 升高；低通截止 300Hz→3.8kHz。
-    final noiseLevel = lerp(0.10, 0.42);
-    final noiseCutoffHz = lerp(300.0, 3800.0);
+    // 6) 谐波：档案怠速/高转两套权重插值 + 调音 + 负荷/拖挡塑形。
+    double lug;
+    if (gear >= 4) {
+      lug = (1.0 - (_smoothRpm / (idleRpm * 1.9))).clamp(0.0, 1.0);
+    } else if (gear == 3) {
+      lug = (1.0 - (_smoothRpm / (idleRpm * 1.6))).clamp(0.0, 1.0) * 0.6;
+    } else {
+      lug = 0.0;
+    }
+    final hiTilt = 0.82 + 0.40 * loadN + 0.22 * _tipIn - 0.25 * lug;
+    final loTilt = 1.0 + 0.26 * lug - 0.05 * loadN;
 
-    // 7) 松油包络：rpm 下滑快时压幅（压完靠平滑回弹，不另起锯齿）。
-    //    速率估计：本帧 rpm 与上一帧平滑值之差 / dt（rpm/s）。
+    final harmonics = <double, double>{};
+    for (final order in kEngineOrders) {
+      final idleW = profile.idleWeights[order] ?? 0.0;
+      final highW = profile.highWeights[order] ?? 0.0;
+      var g = idleW + (highW - idleW) * t;
+      g *= order < 2.0 ? loTilt : hiTilt;
+      g *= _tuning.lowOrderScale(order) * _tuning.highOrderScale(order);
+      harmonics[order] = g.clamp(0.0, 1.2);
+    }
+
+    // 7) 排气噪声：电平随 rpm 升高；低通截止 300Hz→3.8kHz。
+    final noiseLevel = (profile.noiseIdle +
+            (profile.noiseHigh - profile.noiseIdle) * t) *
+        (0.9 + 0.2 * loadN);
+    final noiseCutoffHz = 300.0 + 3500.0 * t;
+
+    // 8) 松油包络：rpm 下滑快时压幅（压完靠平滑回弹，不另起锯齿）。
     final rate = (clamped - _smoothRpm) * 1000.0 / dt;
     var targetDip = 0.0;
     if (rate < -1500.0) {
       targetDip = ((-rate - 1500.0) / 3500.0).clamp(0.0, 0.55);
     }
-    // dip 本身也平滑，快速下落时很快压下去、回弹缓慢。
     final dipAlpha = dt / (120.0 + dt); // 下压快、回放慢
     _coastDip += (targetDip - _coastDip) * dipAlpha;
 
-    // 8) 总增益：基础响度 + 松油压幅；负荷越大脉冲越强（最多 +12%）。
-    final master =
-        lerp(0.55, 0.75) * (1.0 - _coastDip) * (0.94 + 0.14 * loadN);
+    // 9) 总增益：基础响度 + 松油压幅；负荷越大脉冲越强（+12%），
+    //    踩油瞬态再抬 8% 做 attack。
+    final master = (0.55 + 0.20 * t) *
+        (1.0 - _coastDip) *
+        (0.94 + 0.14 * loadN) *
+        (1.0 + 0.08 * _tipIn);
 
-    // 9) 母线低通：排气脉冲的高频含量随负荷与转速抬升。
+    // 10) 母线低通：排气脉冲的高频含量随负荷与转速抬升。
     final busCutoff =
-        (2400.0 + 5600.0 * loadN + 7000.0 * t - 1200.0 * lug).clamp(1800.0, 16000.0);
+        (2400.0 + 5600.0 * loadN + 7000.0 * t - 1200.0 * lug)
+            .clamp(1800.0, 16000.0);
 
     return EngineSoundParams(
       fundamentalHz: f0,
       harmonicGains: harmonics,
-      noiseLevel: noiseLevel,
+      noiseLevel: noiseLevel.clamp(0.0, 0.8),
       noiseCutoffHz: noiseCutoffHz,
-      masterGain: master,
+      masterGain: master.clamp(0.0, 1.0),
       rpmSmoothed: _smoothRpm,
       busCutoffHz: busCutoff,
       load: loadN,
+      grit: (_tuning.grit * profile.roughness).clamp(0.0, 1.0),
+      engineId: profile.id,
     );
   }
 }

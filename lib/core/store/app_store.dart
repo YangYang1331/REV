@@ -126,6 +126,8 @@ class AppStore {
   static const _kEngineSoundEnabled = 'rev_engine_sound_enabled';
   static const _kEnginePack = 'rev_engine_pack';
   static const _kEngineAudioQuality = 'rev_audio_quality';
+  static const _kEngineProfileId = 'rev_engine_profile';
+  static const _kEngineTuning = 'rev_engine_tuning';
   static const _kDataMode = 'rev_data_mode';
   static const _kHorizonFx = 'rev_horizon_fx';
   static const _kVideoSplash = 'rev_video_splash';
@@ -468,6 +470,18 @@ class AppStore {
       (await _prefs).getString(_kEngineAudioQuality) ?? 'auto';
   Future<void> setEngineAudioQuality(String v) async =>
       (await _prefs).setString(_kEngineAudioQuality, v);
+
+  /// 合成声浪的引擎型号（i4 / i6 / v6 / v8 / v10 / v12 / h4 / h6 / rotary）。
+  Future<String> getEngineProfileId() async =>
+      (await _prefs).getString(_kEngineProfileId) ?? 'i4';
+  Future<void> setEngineProfileId(String v) async =>
+      (await _prefs).setString(_kEngineProfileId, v);
+
+  /// 合成声浪调音参数 JSON（亮度/低频/颗粒/回火），见 EngineTuning。
+  Future<String> getEngineTuning() async =>
+      (await _prefs).getString(_kEngineTuning) ?? '';
+  Future<void> setEngineTuning(String v) async =>
+      (await _prefs).setString(_kEngineTuning, v);
 
   // ---- 数据源模式（'demo' 本地模拟 / 'real' 真实 OBD，默认 demo）----
   Future<String> getDataMode() async =>

@@ -3,7 +3,8 @@
 
 对 assets/audio/packs/<pack>/{hi,lo}/loop_*.flac 做三件事：
   1) 去掉直流偏置；
-  2) 首尾 80ms 等功率交叉淡化，消除循环接缝（长循环不再"断一下"）；
+  2) 接缝体检：原接缝 > 峰值的 2% 才做 80ms 等功率交叉淡化，避免把循环点
+     挪到排气脉冲上；多数源片本身剪得干净，保持原样；
   3) 用 ebur128 量响度后加固定增益，统一到 -16 LUFS / True Peak -1.5 dB，
      消除包间响度差（短循环上比 loudnorm 两遍法稳定）。
 
@@ -51,7 +52,13 @@ def decode(path: str, sr: int, ch: int) -> bytes:
     )
 
 
-def seam_crossfade(pcm, ch: int, sr: int):
+def clean_loop(pcm, ch: int, sr: int):
+    """去直流；仅当原接缝确实过大时才做首尾交叉淡化。
+
+    多数源片本身就是在零交叉处剪的（接缝 < 峰值的 2%），强行淡化反而会把
+    循环点挪到某个排气脉冲上，制造新的咔哒声。这里先量原接缝，只有超过
+    2% 才处理，并在目标长度附近挑一个相邻采样差最小的切点。
+    """
     import numpy as np
 
     n = len(pcm) // (4 * ch)
@@ -60,7 +67,22 @@ def seam_crossfade(pcm, ch: int, sr: int):
     x = np.frombuffer(pcm, dtype=np.float32).reshape(n, ch).astype(np.float32)
     # 去直流（逐声道），避免循环边界直流台阶。
     x = x - x.mean(axis=0, keepdims=True)
-    f = min(int(sr * XFADE_SEC), int(n * MAX_XFADE_FRAC))
+    peak = float(np.abs(x).max()) + 1e-9
+    seam_abs = float(np.abs(x[0] - x[-1]).max()) / peak
+    if seam_abs <= 0.02:
+        return x.astype(np.float32).tobytes()
+
+    target = min(int(sr * XFADE_SEC), int(n * MAX_XFADE_FRAC))
+    lo = max(8, int(target * 0.5))
+    hi = min(n // 4, max(lo, int(target * 2.0)))
+    best_f = target
+    best_d = float("inf")
+    for f in range(lo, hi + 1):
+        d = float(np.abs(x[n - f] - x[n - f - 1]).max())
+        if d < best_d:
+            best_d = d
+            best_f = f
+    f = best_f
     if f < 8:
         return x.astype(np.float32).tobytes()
     y = x[: n - f].copy()
@@ -128,7 +150,7 @@ def main() -> int:
                     continue
                 sr, ch, _ = probe(path)
                 raw = decode(path, sr, ch)
-                raw = seam_crossfade(raw, ch, sr)
+                raw = clean_loop(raw, ch, sr)
                 if dry:
                     print(f"[dry] {pack}/{variant}/loop_{band}.flac sr={sr} ch={ch}")
                     total += 1
